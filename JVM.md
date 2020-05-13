@@ -13,6 +13,8 @@ JVM 是运行在操作系统之上的，它与硬件没有直接的交互。
 ## 运行过程
 Java 代码的执行：
 
+**Java 源码首先被编译成字节码，再由不同平台的 JVM 进行解析，Java 语言在不同平台上运行时不需要进行重新编译，Java 虚拟机在执行字节码的时候，把字节码转换成具体平台上的机器指令**。
+
 Java 源文件通过编译器，能够产生相应的 .class 文件，也就是字节码文件，而字节码文件又通过 Java 虚拟机中的解释器，编译成特定机器上的机器码。
 
 ① Java 源文件 -> 编译器 -> 字节码文件
@@ -23,6 +25,9 @@ Java 源文件通过编译器，能够产生相应的 .class 文件，也就是�
 
 程序退出或者关闭，则虚拟机实例消亡，多个虚拟机实例之间数据不同共享。
 
+## JVM 如何加载 .class 文件
+通过 ClassLoader 加载 class 文件到内存（将字节码转换为 JVM 中的 Class<> 对象），并通过 execution engine 对 class 文件中的字节码进行解析，并提交给操作系统去解析
+
 ## JVM 组成部分
 - 运行时数据区（Runtime Data Area）
   - 方法区（Method Area）
@@ -30,12 +35,186 @@ Java 源文件通过编译器，能够产生相应的 .class 文件，也就是�
   - 虚拟机栈（VM Stack）
   - 本地方法栈（）
   - 程序计数器（PC Register）
-- 执行引擎
+- 执行引擎：对命令进行解析
   - 即时编译器（JITCompiler）
   - 垃圾收集（Garbage Collection）
-- 本地库接口（Java Native Interface）
+- 本地库接口（Java Native Interface）：融合不同开发语言的原生库为 Java 所用
 - 本地方法库（Native Method Libraries）
-- 类加载器子系统（Class Loader Subsystem）
+- 类加载器子系统（Class Loader Subsystem）：依据特定格式，加载 class 文件到内存
+
+### ClassLoader
+主要工作在 Class 装载的加载阶段，其主要作用是从系统外部获得 Class 二进制数据流。
+
+它是 Java 的核心组件，所有的 Class 都是由 ClassLoader 进行加载的，ClassLoader 负责通过将 Class 文件里的二进制数据流装载进系统，然后交给 Java 虚拟机进行连接、初始化等操作。
+
+ClassLoader 源代码：
+```java
+public abstract class ClassLoader {     // 抽象类  
+  ...
+  public Class<?> loadClass(String name) throws ClassNotFoundException {
+    return loadClass(name, false);      // 重载（overload）
+  }
+  ...
+  protected Class<?> loadClass(string name, boolean resolve) throws ClassNotFoundException {
+    synchronized (getClassLoadingLock(name)) {
+      // First check is the class has already been loaded
+      Class<?> c = findLoadedClass(name);
+      if (c == null) {
+        long t0 = System.nanoTime();
+        try {
+          if (parent != null) {     // private final ClassLoader parent; -> 表明了 ClassLoader 种类并不是单一的
+            c = parent.loadClass(name, false);
+          } else {
+            c = findBootstrapClassOrNull(name);
+          }
+        } catch (ClassNotFoundException e) {
+        }
+        if (c == null) {
+          // If still not found, then invoke findClass to find the class 
+          long t1 = System.nanoTime();
+          c = findClass(name);
+          ...
+        }
+      }
+    }
+  }
+}
+```
+#### ClassLoader 的种类
+- BootstrapClassLoader：C++编写，加载核心库 java.*
+- ExtClassLoader：Java 编写，加载扩展库 javax.*
+- AppClassLoader：Java 编写，加载程序所在目录
+- 自定义 ClassLoader：Java 编写，定制化加载
+
+ExtClassLoader
+```java
+static class ExtClassLoader extends URLClassLoader {
+  ...
+  private static File[] getExtDirs() {
+    String var0 = System.getProperty("java.ext.dirs");    // 用到某扩展类时去这个目录进行加载
+    ...
+  }
+}
+```
+
+AppClassLoader
+```java
+static class AppClassLoader extends URLClassLoader {
+  ...
+  public static ClassLoader getAppClassLoader(final ClassLoader var0) {
+    final String var1 = System.getProperty("java.class.path");    
+    ...
+  }
+}
+```
+
+自定义 ClassLoader 的实现：
+
+关键函数：
+```java
+protected Class<?> findClass(String name) throws ClassNotFoundException {   // 寻找 class 文件
+  throw new ClassNotFoundException(name);
+}
+```
+```java
+protected final Class<?> defineClass(byte[] b, int off, int len) throws ClassFormatError {  // 定义 class，接收参数为字节流
+  return defineClass(null, b, off, len, null);
+}
+```
+
+MyClassLoader.java
+```java
+import java.io;
+
+public class MyClassLoader extends ClassLoader {
+  private String path;
+  private String classLoaderName;
+  
+  public MyClassLoader(String path, String classLoaderName) {
+    this.path = path;
+    this.classLoaderName = classLoaderName;
+  }
+  
+  // 用于寻找类文件
+  @Override
+  public Class findClass(String name) {
+    byte[] b = loadClassData(name);
+    return defineClass(name, b, 0, b.length);
+  }
+  
+  // 用于加载类文件
+  private byte[] loadClassData(String name) {
+    name = path + name + ".class";
+    InputStream in = null;
+    ByteArrayOutputStream out = null;
+    try {
+      in = new FileInputStream(new File(name));
+      out = new ByteArrayOutputStream();
+      int i = 0;
+      while ((i = in.read()) != -1) {
+        out.write(i);
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+    } finally {
+      try {
+        out.close();
+        in.close();
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }
+    return out.toByteArray();
+  }
+}
+```
+
+#### ClassLoader 的双亲委派机制
+1. 自底向上检查类是否已经加载（如果是，直接返回；否则，委派给 parent 找该类是否加载过）
+2. （如果所有类加载器都没有加载过）-> 自顶向下尝试加载类
+
+loadClass()
+```java
+public Class<?> loadClass(String name) throws ClassNotFoundException {
+    return loadClass(name, false);      // 重载（overload）
+  }
+  ...
+  protected Class<?> loadClass(string name, boolean resolve) throws ClassNotFoundException {
+    synchronized (getClassLoadingLock(name)) {  // 可能存在多个线程调用加载同一个类的情况，避免冲突加同步锁
+      // First check is the class has already been loaded；如果有，直接返回
+      Class<?> c = findLoadedClass(name);
+      // 自底向上检查类是否已经加载
+      if (c == null) {
+        long t0 = System.nanoTime();
+        try {
+          // 自定义ClassLoader -> AppClassLoader -> ExtClassLoader 
+          // ExClassLoaoder -> null；因为 BootstrapClassLoader 是 C++编写的
+          if (parent != null) {     // private final ClassLoader parent; -> 表明了 ClassLoader 种类并不是单一的
+            c = parent.loadClass(name, false);
+          } else {
+            // 到达最顶端的类加载器：BootstrapClassLoader
+            c = findBootstrapClassOrNull(name);
+          }
+        } catch (ClassNotFoundException e) {
+        }
+        // 自顶向下尝试加载类
+        if (c == null) {
+          // If still not found, then invoke findClass in order to find the class 
+          long t1 = System.nanoTime();
+          c = findClass(name);
+          ...
+        }
+      }
+      if (resolve) {
+        resolveClass(c);
+      }
+      return c;
+    }
+```
+
+为什么要使用双亲委派机制去加载类？
+- 避免多份同样字节码的加载：不同类调用System.out.println()，只加载一份 system 字节码
+
 
 ## JVM 内存区域
 JVM 内存区域主要分为线程私有区域（程序计数器、虚拟机栈、本地方法区）、线程共享区（Java 堆、方法区）和直接内存。
