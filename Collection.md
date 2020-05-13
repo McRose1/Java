@@ -40,6 +40,161 @@ Set 注重独一无二的性质，该体系集合用于存储无序（存入和�
 HashSet 通过 hashCode 值来确定元素在内存中的位置，**一个 hashCode 位置上可以存放多个元素**。
 
 ## Map
+<key, values> pair
+- key: Set<K> keySet();   -> 唯一
+- values: Collection<V> values(); -> 允许重复
+
+### HashMap、HashTable、ConcurrentHashMap 之间的区别
+HashMap（Java8 之前）：数组（长度默认 16）+链表，节点叫 Entry
+
+hash(key.hashCode()) % len(16)  -> 实际上是通过位运算进行的，比取模运算效率更高
+
+每个数组元素存储的是链表的头结点
+
+最极端情况都分配到同一个 bucket，相当于变成链表查询，查找性能从 O(1) 恶化到 O(n)
+
+为了解决这个问题，Java8 以后引入了红黑树（TREEIFY_THRESHOLD（默认是 8 ） 来控制是否将链表转换成红黑树），使得性能从 O(n) 提高到 O(logn)，节点叫 Node
+
+UNTREEIFY_THRESHOLD = 6 -> 又重新从红黑树变回链表以保证性能
+
+Node
+```java
+static class Node<K, V> implements Map.Entry<K, V> {
+  final int hash;
+  final K key;
+  V value;
+  Node<K, V> next;
+}
+```
+
+HashMap.java
+```java
+public V put(K key, V value) {
+  return putVal(hash(key), key, value, false, true);
+}
+
+final V putVal(int hash, K key, V value, boolean onlyIfAbsent, boolean evict) {
+  Node<K, V>[] tab; Node<K, V> p; int n, i;
+  if ((tab == table) == null || (n == tab.length) == 0) {
+    // resize 方法既具备初始化，还具备扩容的功能
+    n = (tab = resize()).length;
+  }
+  // 哈希运算
+  if ((p = tab[i - (n - 1) & hash]) == null) {
+    tab[i] = newNode(hash, key, value, null);
+  } else {
+    Node<K, V> e; K k;
+    // 已经存在该键值对
+    if (p.hash == hash && ((k = p.key) == key || (key != null && key.equals(k)))) {
+      // 直接替换数组里的元素
+      e = p;
+    }
+    // 判断当前节点是否已经是树化后的节点
+    else if (p instanceof TreeNode) {
+      // 按照树的方式尝试存储键值对
+      e = ((TreeNode<K, V>)p).putTreeVal(this, tab, hash, key, value);
+    } else {
+      // 按链表插入方式往链表中添加元素
+      for (inr binCount = 0; ; ++binCount) {
+        if ((e = p.next) == null) {
+          p.next = newNode(hash, key, value, null);
+          if (binCount >= TREEIFY_THRESHOLD - 1) {  // -1 for 1st
+            treeifyBin(tab, hash);
+            break;
+          }
+        }
+        if (e.hash == hash && ((k = e.key) == key || (key != null && key.equals(k)))) {
+          break;
+        }
+        p = e;
+      }
+    }
+    if (e != null) {        // existing mapping for key
+      V oldValue = e.value;
+      if (!onlyIfAbsent || oldValue == null) {
+        e.value = value;
+      }
+      afterNodeAccess(e);
+      return oldValue;
+    }
+  }
+}
+
+public V get(Object key) {
+  Node<K, V> e;
+  return (e = getNode(hash(key), key)) == null ? null : e.value;
+}
+
+final Node<K, V> getNode(int hash, Object key) {
+  Node<K,V>[] tab; Node<K, V> first, e; int n; K k;
+  if ((tab = table) != null && (n = table.length) > 0 && (first = tab[(n - 1) & hash]) != null) {
+    if (first.hash == hash && ((k = first.key) == key || (key != null && key.equals(k)))) { // always check first node
+      return first;
+    }
+    if ((e = first.next) != null) {
+      if (first instanceof TreeNode) {
+        return ((TreeNode<K, V>)first).getTreeNode(hash, key, value);
+      }
+      do {
+        if (e.hash == hash && (k = e.key) == key || (key != null && key.equals(k)))) {
+          return e;
+        }
+      } while ((e = e.next) != null);
+    }
+  }
+  return null;
+}
+
+static final int hash(Object key) {
+  int h;
+  return (k == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+}
+
+final Node<K, V>[] resize() {
+  Node<K, V>[] oldTab = table;
+  int oldCap = (oldTab == null) ? 0 : oldTab.length;
+  int oldThr = threshold;
+  int newCap, newThr = 0;
+  if (oldCap > 0) {
+    if (oldCap >= MAXIMUM_CAPACITY) {
+      threshold = Integer.MAX_VALUE;
+      return oldTab;
+    }
+    else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY && oldCap >= DEFAULT_INITIAL_CAPACITY) {
+      // 用新的更大的数组存
+      newThr = oldThr << 1;   // double threshold
+    }
+  } else if (oldThr > 0) {    // initial capacity was placed in  threshold
+    newCap = oldThr;          
+  } else {                    // zero initial threshlod signifies using 
+    
+  }
+}
+```
+
+HashMap: put 方法逻辑：
+1. 如果 HashMap 未被初始化过，则初始化
+2. 对 Key 求 Hash 值，然后再计算下标
+3. 如果没有哈希碰撞，直接放入桶中
+4. 如果碰撞了，以链表的方式链接到后面
+5. 如果链表长度超过阈值，就把链表转成红黑树
+6. 如果链表长度低于 6，就把红黑树转回链表
+7. 如果节点已经存在就替换旧值
+8. 如果桶满了（容量 16 * 加载因子 0.75），就需要 resize（扩容 2 倍后重排）
+
+HashMap：如何有效减少碰撞？
+- 扰动函数：促使元素位置分部均匀，减少碰撞几率（目的是让不同的对象返回不同的 hashCode）
+- 使用 final 对象（不可变性使得能够缓存不同键的 hashCode，可以防止键值改变，将会提高获取对象的速度），并采用合适的 equals() 和 hashCode() 方法（使用String, Integer 这样的 wrap 类作为键有好处因为 String 是 final 的并且已经重写了 equals() 和 hashCode() 方法）
+
+Hashmap：扩容所带来的问题：
+- 多线程环境下，调整大小会存在条件竞争，容易造成死锁
+- rehashing 是一个比较耗时的过程
+
+HashMap 知识点回顾：
+- 成员变量：数据结构，树化阈值
+- 构造函数：延迟创建
+- put 和 get 的流程
+- 哈希算法，扩容，性能
 
 ### HashMap（数组+链表+红黑树）
 HashMap 根据键的 hashCode 值存储数据，大多数情况下可以直接定位到它的值，因而具有很快的访问速度，但遍历顺序却是不确定的。
