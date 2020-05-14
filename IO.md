@@ -7,10 +7,11 @@
 | 线程数（server:client）| 1:1 | 1:N | 0:N |
 | 复杂度 | 简单 | 较复杂 | 复杂 |
 | 吞吐量 | 低 | 高 | 高 |
+| 使用场景 | 连接数比较小且固定的架构 | 连接数目多且连接比较短的架构，比如聊天服务器 | 连接数目多且连接比较长的架构，比如相册服务器 |
 
 
 ## 阻塞 IO 模型
-Block-IO：InputStream 和 OutputStream，Reader 和 Writer 55
+Block-IO：InputStream 和 OutputStream，Reader 和 Writer 
 
 最传统的一种 IO 模型，即在读写数据过程中会发生阻塞现象。
 
