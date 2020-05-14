@@ -1,6 +1,13 @@
 # Java 的 IO 机制
 
-## BIO、NIO、AIO 之间的区别
+## BIO、NIO、AIO 之间的对比
+|属性\模型 | 阻塞 BIO | 非阻塞 NIO | 异步 AIO |
+| --- | ---- | ---- | ---- |
+|blocking | 阻塞并同步 | 非阻塞但同步 | 非阻塞但异步 |
+| 线程数（server:client）| 1:1 | 1:N | 0:N |
+| 复杂度 | 简单 | 较复杂 | 复杂 |
+| 吞吐量 | 低 | 高 | 高 |
+
 
 ## 阻塞 IO 模型
 Block-IO：InputStream 和 OutputStream，Reader 和 Writer 55
