@@ -28,6 +28,8 @@ Java 源文件通过编译器，能够产生相应的 .class 文件，也就是�
 ## JVM 如何加载 .class 文件
 通过 ClassLoader 加载 class 文件到内存（将字节码转换为 JVM 中的 Class<> 对象），并通过 execution engine 对 class 文件中的字节码进行解析，并提交给操作系统去解析
 
+
+
 ## JVM 组成部分
 - 运行时数据区（Runtime Data Area）
   - 方法区（Method Area）
@@ -41,6 +43,18 @@ Java 源文件通过编译器，能够产生相应的 .class 文件，也就是�
 - 本地库接口（Java Native Interface）：融合不同开发语言的原生库为 Java 所用
 - 本地方法库（Native Method Libraries）
 - 类加载器子系统（Class Loader Subsystem）：依据特定格式，加载 class 文件到内存
+
+### Native Interface 
+Class.forName(String, boolean, ClassLoader)
+
+```java
+public static Class<?> forName(String className) throws ClassNotFoundException {
+  Class<?> caller = Reflection.getCallerClass();
+  return forName0(className, true, ClassLoader.getClassLoader);
+}
+
+private static native Class<?> forName0(String name, boolean i, ClassLoader loader, Class<?> caller) throws ClassNotFoundException;       // native 接口，无法看到实际实现
+```
 
 ### ClassLoader
 主要工作在 Class 装载的加载阶段，其主要作用是从系统外部获得 Class 二进制数据流。
@@ -214,7 +228,6 @@ public Class<?> loadClass(String name) throws ClassNotFoundException {
 
 为什么要使用双亲委派机制去加载类？
 - 避免多份同样字节码的加载：不同类调用System.out.println()，只加载一份 system 字节码
-
 
 ## JVM 内存区域
 JVM 内存区域主要分为线程私有区域（程序计数器、虚拟机栈、本地方法区）、线程共享区（Java 堆、方法区）和直接内存。
