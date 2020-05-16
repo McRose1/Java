@@ -28,7 +28,11 @@ Java 源文件通过编译器，能够产生相应的 .class 文件，也就是�
 ## JVM 如何加载 .class 文件
 通过 ClassLoader 加载 class 文件到内存（将字节码转换为 JVM 中的 Class<> 对象），并通过 execution engine 对 class 文件中的字节码进行解析，并提交给操作系统去解析
 
-
+## 类的加载方式
+- 隐式加载：new
+- 显式加载：loadClass, forName 等
+  - 需要调用 newInstance() 方法
+  - 不支持参数（需要通过反射）
 
 ## JVM 组成部分
 - 运行时数据区（Runtime Data Area）
@@ -50,10 +54,53 @@ Class.forName(String, boolean, ClassLoader)
 ```java
 public static Class<?> forName(String className) throws ClassNotFoundException {
   Class<?> caller = Reflection.getCallerClass();
-  return forName0(className, true, ClassLoader.getClassLoader);
+  return forName0(className, true, ClassLoader.getClassLoader(caller), caller);   // initialize: true（初始化）
 }
 
 private static native Class<?> forName0(String name, boolean i, ClassLoader loader, Class<?> caller) throws ClassNotFoundException;       // native 接口，无法看到实际实现
+```
+
+#### 反射机制
+Java 反射机制是在运行状态中，对于任意一个类，都能够知道这个类的所有属性和方法；对于任意一个对象，都能够调用它的任意方法和属性；这种动态获取信息以及动态调用对象方法的功能称为 Java 语言的反射机制。
+
+反射的例子：
+```java
+package com.interview.javabasic.reflect;
+
+public class Robot {
+  private String name;
+  public void sayHi(String helloSentence) {
+    System.out.println(helloSentence + " " + name);
+  }
+  private String throwHello(String tag) {
+    return "Hello " + tag;
+  }
+}
+```
+
+```java
+package com.interview.javabasic.reflect;
+
+public class ReflectSample {
+  public static void main(String[] args) throws ClassNotFoundException, IllegalAccessException {
+    Class rc = Class.forName("com.interview.javabasic.reflect.Robot");
+    Robot r = (Robot) rc.newInstance();
+    System.out.println("Class name is " rc.getName());
+    
+    Method getHello = rc.getDeclaredMethod("throwHello", String.class);   // 获取所有方法除了继承父类和接口的方法
+    getHello.setAccessible(true);                     // 获取 private 方法
+    Object str = getHello.invoke(r, "Bob");
+    System.out.println("getHello result is " + str);    
+    
+    Method sayHi = rc.getMethod("sayHi", String.class);      // 只能获取 public 的方法，但是可以获取继承父类和继承接口的方法
+    sayHi.invoke(r, "Welcome");
+          
+    Field name = rc.getDeclaredField("name");       // 获取 private 成员
+    name.setAccessible(true);
+    name.set(r, "Alice");
+    sayHi.invoke(r, "Welcome");
+  }
+}
 ```
 
 ### ClassLoader
@@ -191,7 +238,7 @@ loadClass()
 ```java
 public Class<?> loadClass(String name) throws ClassNotFoundException {
     return loadClass(name, false);      // 重载（overload）
-  }
+}
   ...
   protected Class<?> loadClass(string name, boolean resolve) throws ClassNotFoundException {
     synchronized (getClassLoadingLock(name)) {  // 可能存在多个线程调用加载同一个类的情况，避免冲突加同步锁
@@ -229,20 +276,107 @@ public Class<?> loadClass(String name) throws ClassNotFoundException {
 为什么要使用双亲委派机制去加载类？
 - 避免多份同样字节码的加载：不同类调用System.out.println()，只加载一份 system 字节码
 
-## JVM 内存区域
-JVM 内存区域主要分为线程私有区域（程序计数器、虚拟机栈、本地方法区）、线程共享区（Java 堆、方法区）和直接内存。
+### loadClass 和 forName 的区别
+类的装载过程：
+- 加载：通过 ClassLoader 加载 class 文件字节码，生成 Class 对象
+- 链接
+  - 校验：检查加载的 class 的正确性和安全性
+  - 准备：为类变量分配存储空间并设置类变量初始值
+  - 解析：JVM 将常量池内的符号引用转换为直接引用
+- 初始化：执行类变量赋值和静态代码块
+
+ClassLoader.java
+```java
+/**
+ *  @param resolve: If true, then resolve the class
+ */
+public Class<?> loadClass(String name) throws ClassNotFoundException {
+    return loadClass(name, false);      
+}
+  ...
+  if (resolve) {
+        resolveClass(c);
+  }
+  
+/** Links the specified class.
+ *  @param resolve: If true, then resolve the class
+ */
+public final void resolveClass(Class<?> c) {
+    resolveClass0(c);      
+}  
+```
+
+```java
+public static Class<?> forName(String className) throws ClassNotFoundException {
+  Class<?> caller = Reflection.getCallerClass();
+  return forName0(className, true, ClassLoader.getClassLoader(caller), caller);   // initialize: true（初始化）
+}
+```
+结论：
+- Class.forName 得到的 class 是已经初始化完成的（已经完成第三步）
+- classLoader.loadClass 得到的 class 是还没有链接的（只完成了第一步）
+
+```java
+package com.interview.javabasic.reflect;
+
+public class Robot {
+  static {                            // 静态代码段在类初始化的时候执行
+    System.out.println("Hello Robot")
+  }
+}
+```
+
+LoadDifference.java
+```java
+public class LoadDifference {
+  public static void main(String[] args) throws ClassNotFoundException {
+    ClassLoader cl = Robot.class.getClassLoader();                    // 没有打印
+    Class r = Class.forName("com.interview.javabasic.reflect.Robot"); // 打印出了 Hello Robot
+    
+    // 连接 MySQL 加载其 driver 的时候必须用 Class.forName
+    // 因为 Driver 里面有一段静态代码段
+    
+    // Spring IOC lazy loading 用的是 ClassLoader，加快加载速度
+  }
+}
+```
+
+## JVM 内存模型——JDK8
+JVM 内存区域主要分为：
+- 线程私有区域
+  - 程序计数器（字节码指令 no OOM）
+  - 虚拟机栈（Java 方法 SOF & OOM）自动释放不需要 GC
+  - 本地方法区（Native 方法 SOF & OOM）
+- 线程共享区
+  - 元空间（类加载信息 OOM）
+  - Java 堆（数组和类对象 OOM）
+    - 常量池（字面量和符号引用量 OOM）
+- 直接内存
 
 ### 线程私有区域
 **线程私有数据区域生命周期与线程相同，依赖用户线程的启动/结束，而创建/销毁（在 Hotspot VM 内**，每个线程都与操作系统的本地线程直接映射，因此这部分内存区域的存/否跟随本地线程的生/死对应）。
 
 #### 程序计数器（线程私有）
+- 当前线程所执行的字节码行号指示器（逻辑）
+- 改变计数器的值来选取下一条需要执行的字节码指令
+- 和线程是一对一的关系即“线程私有”
+- 对 Java 方法计数，如果是 Native 方法则计数器值为 Undefined
+- 不会发生内存泄漏
+
 一块较小的内存空间，**是当前线程所执行的字节码的行号指示器**，每条线程都要有一个独立的程序计数器，这类内存也被称为“线程私有”的内存。
 
 正在执行 Java 方法的话，计数器记录的时虚拟机字节码指令的地址（当前指令的地址）。如果还是 Native 方法，则为空。
 
 这个内存区域是唯一一个在虚拟中没有规定任何 OutOfMemoryError 情况的区域。
 
-#### 虚拟机栈（线程私有）
+#### 虚拟机栈（线程私有）—— 深度有限 
+- Java 方法执行的内存模型
+- 包含多个栈帧（java.lang.StackOverflowError 异常）
+  - 局部变量表（Local Variable Table）：包含方法执行过程中的所有变量
+  - 操作栈（Operand Stack）：入栈、出栈、复制、交换、产生消费变量
+  - 动态连接（Dynamic Linking）
+  - 返回地址（Return Address）
+
 **是描述 Java 方法执行的内存模型，每个方法在执行的同事都会创建一个栈帧（Stack Frame）用于存储局部变量表、操作数栈、动态链接、方法出口等信息**。
 
 **每一个方法从调用直至执行完成的过程，就对应着一个栈帧在虚拟机中入栈到出栈的过程**。
@@ -250,6 +384,101 @@ JVM 内存区域主要分为线程私有区域（程序计数器、虚拟机栈�
 **线程共享区域随虚拟机的启动/关闭而创建/销毁**。
 
 **直接内存并不是 JVM 运行时数据区的一部分**，但也会被频繁的使用：在 JDK 1.4 引入的 **NIO 提供了基于 Channel 与 Buffer 的 IO 方式，它可以使用 Native 函数库直接分配堆外内存，然后使用 DirectByteBuffer 对象作为这块内存的引用进行操作，这样就避免了在 Java 堆和 Native 堆中来回复制数据，因此在一些场景中可以显著提高性能**。
+
+虚拟栈过多会引发 java.lang.OutOfMemoryError 异常
+
+#### 本地方法栈（线程私有） 
+- 与虚拟机栈相似，主要作用于标注了 native 的方法
+
+#### 元空间（MetaSpace）（线程共享） 
+与永久代（PermGen）的区别：
+
+**元空间使用本地内存，而永久代使用的是 JVM 的内存**：java.lang.OutOfMemoryError: PermGen space 不复存在
+
+MetaSpace 相比 PermGen 的优势：
+- 字符串常量池存在永久代中，容易出现性能问题和内存溢出
+- 类和方法的信息大小难以确定，给永久代的大小指定带来困难
+- 永久代会为 GC 带来不必要的复杂性
+- 方便 HotSpot 与其他 JVM 如 Jrockit 的集成
+
+#### Java 堆（线程共享） 
+- 对象实例的分配区域
+- GC 管理的主要区域
+
+## Java 内存模型中堆和栈的区别——内存分配策略
+- 静态存储：编译时确定每个数据目标在运行时的存储空间需求
+- 栈式存储：数据区需求在编译时未知，运行时模块入口前确定
+- 堆式存储：编译时或运行时模块入口都无法确定，动态分配
+
+### Java 内存模型中堆和栈的区别
+- 联系：引用对象、数组时，栈里定义变量保存堆中目标的首地址
+
+区别：
+- 管理方式：栈自动释放，堆需要 GC
+- 空间大小：栈比堆小
+- 碎片相关：栈产生的碎片远小于堆
+- 分配方式：栈支持静态和动态分配，而堆仅支持动态分配
+- 效率：栈的效率比堆高
+
+## 元空间、堆、线程独占部分间的联系——内存角度
+```java
+public class HelloWorld {
+  private String name;
+  public void sayHello() {
+    System.out.println("Hello " + name);
+  }
+  
+  public void setName(String name) {
+    this.name = name;
+  }
+  
+  public static void main(String[] args) {
+    int a = 1;
+    HelloWorld hw = new HelloWorld();
+    hw.setName("test");
+    hw.sayHello();
+  }
+}
+```
+
+- 元空间：
+  - Class: HelloWorld - Method: sayHello\setName\main - Field: name
+  - Class: System
+- Java 堆：
+  - Object: String("test")
+  - Object: HelloWorld
+- 线程独占：
+  - Parameter reference: "test" to String object
+  - Variable reference: "hw" to HelloWorld object
+  - Local Variables: a with 1, lineNo
+
+## 不同 JDK 版本之间的 intern() 方法的区别——JDK6 VS. JDK6+
+```java
+String s = new String("a");
+s.intern();
+```
+
+- JDK6：当调用 intern 方法时，如果字符串常量池先前已创建出该字符串对象，则返回池中的该字符串的引用。否则，将此字符串对象添加到字符串常量池中，并且返回该字符串对象的引用。
+- JDK6+：当调用 intern 方法时，如果字符串常量池先前已创建出该字符串对象，则返回池中的该字符串的引用。否则，如果该字符串对象已经存在于 Java 堆中，则将堆中该对象的引用添加到字符串常量池中，并且返回该引用；如果堆中不存在，则在池中创建该字符串并返回其引用。
+
+InternDiffernece.java
+```java
+public class InternDifference {
+  public static void main (String[] args) {
+    String s = new String("a");
+    s.intern();
+    String s2 = "a";
+    System.out.println(s == s2);
+    
+    String s3 = new String("a") + new String("a");
+    s3.intern();
+    String s4 = "aa";
+    System.out.println(s3 == s4);
+  }
+}
+```
+- JDK6: false false 
+- JDK6+: false true
 
 ## JVM 运行时内存
 Java 堆从 GC 的角度还可以细分为：
@@ -496,9 +725,10 @@ JVM 通过双亲委派模型进行类的加载，当然我们也可以通过继�
 
 采用双亲委派的一个好处是比如加载位于 rt.jar 包中的类 java.lang.Object，不管是哪个加载器加载这个类，最终都是委托给顶层的启动类加载器进行加载，这样就保证了**使用不同的类加载器最终得到的都是同样一个 Object 对象**。
 
-
-
-
+## JVM 三大性能调优参数 -Xms -Xmx -Xss 的含义
+- Xss：规定了每个线程虚拟机栈（堆栈）的大小（一般情况下，256k）
+- Xms：堆的初始值
+- Xmx：堆能达到的最大值（一般和 Xms 设为一样，防止堆扩容造成内存抖动）
 
 
 
