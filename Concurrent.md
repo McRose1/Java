@@ -21,9 +21,26 @@
 
 ### Java 进程和线程的区别
 - Java 对操作系统提供的功能进行封装，包括进程和线程
-- 运行一个程序会产生一个进程，
+- 运行一个程序会产生一个进程，进程包含至少一个线程
+- 每个进程对应一个 JVM 实例，多个线程共享 JVM 里的堆
+- Java 采用单线程编程模型，程序会自动创建主线程
+- 主线程可以创建子线程，原则上要后于子线程完成执行
+
+```java
+public class CurrentThreadDemo {
+  public static void main(String[] args) {
+    System.out.println("Current Thread: " + Thread.currentThread().getName());
+  }
+}
+```
+Current Thread: main
 
 ## Java 线程实现/创建方式
+
+**Thread 中的 start 和 run 方法的区别**:
+Thread#start()  ->   JVM_StartThread   ->    thread_entry   ->   Thread#run()
+- 调用 start() 方法会创建一个新的子线程并启动
+- run()方法只是 Thread 的一个普通方法的调用
 
 ### 继承 Thread 类
 Thread 类本质上是实现了 Runnable 接口的一个实例，代表一个线程的实例。
@@ -50,9 +67,9 @@ public class MyThread extends OtherClass implements Runnable {
     System.out.println("MyThread.run()");
   }
 }
-// 启动 MyThread，需要首先实例化一个 Thread，并传入自己的 MyThread 实例：
-MyThread myThread = new MyThread();
-Thread thread = new Thread(myThread);
+// 因为 Runnable 接口没有 start() 这个方法，所以需要首先实例化一个 Thread，并传入自己的 MyRunnable 实例：
+MyRunnable myRunnable = new MyRunnable();
+Thread thread = new Thread(myRunnable);
 thread.start();
 // 事实上，当传入一个 Runnable target 参数给 Thread 后，Thread 的 run() 方法就会调用 target.run()
 public void run() {
@@ -61,6 +78,273 @@ public void run() {
   }
 }
 ```
+
+**Thread 和 Runnable 是什么关系**
+- Thread 是实现了 Runnable 接口的类，使得 run 支持多线程
+- 因类的单一继承原则，推荐多使用 Runnable 接口
+
+**如何给 run() 方法传参**
+实现的方式主要有三种：
+- 构造函数传参
+- 成员变量传参
+- 回调函数传参
+
+**如何实现处理线程的返回值**
+实现的方式主要有三种：
+- 主线程等待法
+  - 优点：实现简单
+  - 缺点：需要自己实现循环等待的逻辑，等待的变量如果很多，代码会显得异常臃肿；需要循环多久是不确定的，无法做到精准控制
+- 使用 Thread 类的 join() 阻塞当前线程以等待子线程处理完毕
+  - 优点：能做到比主线程等待法更精准的控制是，实现起来更简单
+  - 缺点：粒度不够细   
+- 使用 Callable 接口实现：通过 FutureTask 或线程池获取（JDK5 之后实现了多线程可以有返回值）
+
+CycleWait.java
+```java
+public class CycleWait implements Runnable {
+  private String value;
+  public void run() {
+    try {
+      Thread.currentThread().sleep(5000);
+    } catch {
+      e.printStackTrace();
+    }
+    value = "we have data now";
+  }
+}
+
+public static void main(String[] args) throws InterruptedException {
+  CycleWait cw = new CycleWait();
+  Thread t = new Thread(cw);
+  t.start();
+  // 1.
+  while (cw.value == null) {
+    Thread.currentThread().sleep(100);
+  }
+  // 2.
+  t.join();
+  System.out.println("value : " + cw.value);
+}
+```
+
+MyCallable.java
+```java
+public class MyCallable implements Callable<String> {
+  @Override
+  public String call() throws Exception {
+    String value = "test";
+    System.out.println("Ready to work");
+    Thread.currentThread().sleep(5000);
+    System.out.println("task done");
+    return value;
+  }
+}
+```
+
+FutureTaskDemo.java
+```java
+public class FutureTaskDemo {
+  public static void main(String[] args) {
+    FutureTask<String> task = new FutureTask<String>(new MyCallable);
+    new Thread(task).start();
+    if (!task.isDone()) {
+      System.out.println("task has not finished, please wait!");
+    } 
+    System.out.println("task return: " + task.get());
+  }
+}
+```
+
+ThreadPoolDemo.java
+```java
+public class ThreadPoolDemo {
+  public static void main(String[] args) {
+    ExecutorService newCachedThreadPool = Executors.newCachedThreadPool();
+    Future<String> future = newCachedThreadPool.submit(new Callable());
+    if (!future.isDone()) {
+      System.out.println("task has not finished, please wait!");
+    }
+    try {
+      System.out.println(future.get());
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    } catch (ExecutionException e) {
+      e.printStackTrace();
+    } finally {
+      newCachedThreadPool.shutdown();
+    }
+  }
+}
+```
+
+### 线程的状态
+6 个状态：
+- 新建（New）：创建后尚未启动的线程的状态
+- 运行（Runnable）：包含 Running 和 Ready
+- 无限期等待（Waiting）：不会分配 CPU 执行时间，需要显式被唤醒
+  - 没有设置 Timeout 参数的 Object.wait() 方法
+  - 没有设置 Timeout 参数的 Thread.join() 方法
+  - LockSupport.park() 方法
+- 限期等待（Time Waiting）：在一定时间后由系统自动唤醒
+  - Thread.sleep()方法
+  - 设置了 Timeout 参数的 Object.wait() 方法
+  - 设置了 Timeout 参数的 Thread.join() 方法
+  - LockSupport.parkNanos() 方法
+  - LockSupport.parkUntil() 方法
+- 阻塞（Blocked）：等待获取排他锁
+- 结束（Terminated）：已终止线程的状态，线程已经结束执行
+
+Thread.java
+```java
+public enum State {
+  /**
+   *  Thread state for a thread which has not yet started.
+   */ 
+   NEW,
+   
+   /**
+    * Thread state for a runnable thread. A thread in the runnable state is executing in the JVM 
+    * but it may be waiting for other resources from the operating system such as processor.
+    */
+    RUNNABLE,
+    
+    /**
+     * Thread state for a thread blocked waiting for a monitor lock.
+     * A thread in the blocked state is waiting for a monitor lock to enter a synchronized block/method after calling 
+     * {@link Object#wait() Object.wait}.
+     */
+     BLOCKED,
+     
+     /**
+      * Thread state for a waiting thread.
+      * A thread is in the waiting state due to calling one of the following methods:
+      * <ul>
+      *   <li>{@link Object#wait() Object.wait()} with no timeout</li>
+      *   <li>{@link #join() Thread.join} with no timeout</li>
+      *   <li>{@link LockSupport#park() LockSupport.park}</li>
+      * </ul>
+      *
+      * <p>A thread in the waiting state is waiting for another thread to perform a particular action.
+      *
+      * For example, a thread that has called {@code Object.wait()} on an object is waiting for another thread to call
+      * {@code Object.notify()} or {@code Object.notifyAll()} on that object 
+      * A thread that has called {@code Thread.join()} is waiting for a specified thread to terminate.
+      */
+      WAITING,
+      
+      /**
+       * Thread state for a waiting thread with a specified waiting time.
+       * A thread is in the timed waiting state due to calling one of the following methods 
+       * with a specified positive waiting time:
+       * <ul>
+       *   <li>{@link #sleep Thread.sleep}</li>
+       *   <li>{@link Object#wait(long) Object.wait()} with timeout</li>
+       *   <li>{@link #join(long) Thread.join} with timeout</li>
+       *   <li>{@link LockSupport#parkNanos() LockSupport.parkNanos}</li>
+       *   <li>{@link LockSupport#parkUntil() LockSupport.parkUntil}</li>
+       * </ul>
+       */
+       TIME_WAITING,
+       
+       /**
+        * Thread state for a terminated thread.
+        * The thread has completed execution.
+        TERMINATED;
+}
+```
+
+### sleep 和 wait 的区别
+**基本的差别**：
+- sleep 是 Thread 类的方法，wait 是 Object 类中定义的方法
+- sleep() 方法可以在任何地方使用
+- wait() 方法只能在 synchronized 方法或 synchronized 块中使用
+
+Thread.java
+```java
+public static native void sleep(long millis) throws InterruptedException
+```
+
+Object.java
+```java
+public final void wait() throws InterruptedException {
+  wait(0L);
+}
+
+public final native void wait(long timeoutMillis) throws InterruptedException;
+```
+
+**最主要的本质区别**：
+- Thread.sleep 只会让出 CPU，不会导致锁行为的改变
+- Object.wait 不仅让出 CPU，还会释放已经占有的同步资源锁
+
+WaitSleepDemo.java
+```java
+public class WaitSleepDemo {
+  public static void main(String[] args) {
+    final Object lock = new Object();
+    
+    // 执行 wait 逻辑
+    new Thread(new Runnable) {
+      @Override
+      public void run() {
+        System.out.println("thread A is waiting to get lock");
+        synchronized (lock) {
+          try {
+            System.out.println("thread A get lock");
+            Thread.sleep(20);
+            System.out.println("thread A do wait method);
+            lock.wait(1000);
+            System.out.println("thread A is done");
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+        }
+      }
+    }).start();
+    try {
+      Thread.sleep(10);
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }
+    
+    // 执行 sleep 逻辑
+    new Thread(new Runnable) {
+      @Override
+      public void run() {
+        System.out.println("thread B is waiting to get lock");
+        synchronized (lock) {
+          try {
+            System.out.println("thread B get lock");
+            System.out.println("thread B is sleeping 10 ms");
+            Thread.sleep(10);
+            System.out.println("thread B is done");
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+        }
+      }
+    }).start();
+  }
+}
+```
+- thread A is waiting to get lock 
+- thread A get lock
+- thread B is waiting to get lock 
+- thread A do wait method 
+- thread B get lock 
+- thread B is sleeping 10 ms
+- thread B is done
+- thread A is done
+
+如果顺序交换：
+- thread A is waiting to get lock 
+- thread A get lock
+- thread B is waiting to get lock 
+- thread A do wait method 
+- thread A is done
+- thread B get lock 
+- thread B is sleeping 10 ms
+- thread B is done
 
 ## Java 锁
 
