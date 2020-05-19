@@ -346,6 +346,104 @@ public class WaitSleepDemo {
 - thread B is sleeping 10 ms
 - thread B is done
 
+### notify 和 notifyAll 的区别 
+- notifyAll 会让所有处于等待池的线程全部进入锁池去竞争获取锁的机会
+- notify 只会随机选取一个处于等待池中的线程进入锁池去竞争获取锁的机会
+
+#### 锁池（EntryList）
+假设线程 A 已经拥有了某个对象（不是类）的锁，而其它线程 B、C 想要调用这个对象的某个 synchronized 方法（或者块），由于 B、C 线程在进入对象的 synchronized 方法（或者块）之前必须先获得该对象锁的拥有权，而恰巧该对象的锁目前正被线程 A 所占用，此时 B、C 线程就会被阻塞，进入一个地方去等待锁的释放，这个地方便是该对象的锁池。
+
+#### 等待池（WaitSet）
+假设线程 A 调用了某个对象的 wait()方法，线程 A 就会释放该对象的锁，同时线程 A 就进入到了该对象的等待池中，进入到等待池中的线程不会去竞争该对象的锁。
+
+WaitSleepDemo.java
+```java
+public class WaitSleepDemo {
+  public static void main(String[] args) {
+    final Object lock = new Object();
+    
+    // 执行 wait 逻辑
+    new Thread(new Runnable) {
+      @Override
+      public void run() {
+        System.out.println("thread A is waiting to get lock");
+        synchronized (lock) {
+          try {
+            System.out.println("thread A get lock");
+            Thread.sleep(20);
+            System.out.println("thread A do wait method);
+            lock.wait();                              // 进入无限等待
+            System.out.println("thread A is done");
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+        }
+      }
+    }).start();
+    try {
+      Thread.sleep(10);
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }
+    
+    // 执行 sleep 逻辑
+    new Thread(new Runnable) {
+      @Override
+      public void run() {
+        System.out.println("thread B is waiting to get lock");
+        synchronized (lock) {
+          try {
+            System.out.println("thread B get lock");
+            System.out.println("thread B is sleeping 10 ms");
+            Thread.sleep(10);
+            System.out.println("thread B is done");
+            lock.notify();                    // 唤醒线程 A
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+        }
+      }
+    }).start();
+  }
+}
+```
+
+### yield
+当调用 Thread.yield()函数时，会给线程调度器一个当前线程愿意让出 CPU 使用的暗示，但是线程调度器可能会忽略这个暗示。
+
+Thread.java
+```java
+/**
+  * A hint to the scheduler that the current thread is willing to yield its current use of processor.
+  * The scheduler is free to ignore this hint.
+  *
+  * <p> Yield is a heurisitic attempt to improve relative progression between threads that would otherwise over-utilise a CPU.
+  * Its use should be combined with detailed profiling and benchmarking to ensure that it actually has the desired effect.
+  * 
+  * <p> It is rarely appropriate to use this method. 
+  * It may be useful for debugging or testing purposes, where it may help to reproduce bugs due to race conditions.
+  * It may also be useful when designing concurrency control constructs such as the ones in the 
+  * {@links java.util.concurrent.locks} package.
+  */
+  public static native void yield();
+```
+
+### 如何中断线程（Interrupt）
+目前使用的方法：
+- 调用 interrupt()，通知线程应该中断了
+  - 如果线程处于被阻塞状态，那么线程将立即退出被阻塞状态，并抛出一个 InterruptedException 异常
+  - 如果线程处于正常活动状态，那么会将该线程的中断标志设置为 true。被设置中断标志的线程将继续正常运行，不受影响。
+- 需要被调用的线程配合中断
+  - 在正常运行任务时，经常检查本线程的中断标志位，如果被设置了中断标志就自行停止线程。
+  - 如果线程处于正常活动状态，那么会将该线程的中断标志设置为 true。被设置中断标志的线程将继续正常运行，不受影响。
+
+已经被抛弃的方法：
+- 通过调用 stop()方法停止线程
+- 通过调用 suspend()和resume()方法
+
+### 线程状态图
+(images/线程状态图.jpeg)
+
 ## Java 锁
 
 ### 乐观锁
