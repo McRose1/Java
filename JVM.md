@@ -783,6 +783,9 @@ MajorGC 会产生内存碎片，为了减少内存损耗，我们一般需要进
 - 安全点数量得适中
 
 ## GC 垃圾收集器
+Java 堆内存被划分为新生代和老年代两部分，新生代主要使用复制和标记-清除垃圾回收算法；老年代主要使用标记-整理垃圾回收算法，因此 Java 虚拟机针对新生代和老年代分别提供了多种不同的垃圾收集器，JDK1.6 中 Sun HotSpot 虚拟机的垃圾收集器如下：
+[!GC Collector](images/GC%20collector.png)
+
 JVM 的运行模式：
 - Server
 - Client
@@ -921,10 +924,20 @@ Second print: null
 - 抛出 OutOfMemoryError 终止程序也不会回收具有强引用的对象
 - 通过将对象设置为 null 来弱化引用，使其被回收
 
+**把一个对象赋给一个引用变量，这个引用变量就是一个强引用**。
+
+当一个对象被强引用变量引用时，它处于可达状态，它是不可能被垃圾回收机制回收的，即该对象以后永远都不会被用到，JVM 也不会回收。
+
+强引用是造成 Java 内存泄漏的主要原因之一。
+
 #### 软引用（Soft Reference）
 - 对象处在有用但非必须的状态
 - 只有当内存空间不足时，GC 会回收该引用的对象的内存
 - 可以实现高速缓存
+
+**软引用需要用 SoftReference 类实现**，对于只有软引用的对象来说，当系统内存组够时它不会被回收，当系统内存空间不足时它会被回收。
+
+软引用通常用在对内存敏感的程序中。
 
 ```java
 string str = new String("abc");   // 强引用
@@ -937,6 +950,8 @@ SoftReference<String> softRef = new SoftReference<String>(str);   // 软引用
 - 被回收的概率也不大，因为 GC 线程优先级比较低
 - 适用于引用偶尔被使用且不影响垃圾收集的对象
 
+弱引用需要用 WeakReference 类来实现，它比软引用的生存期更短，对于只有弱引用的对象来说，只要垃圾回收机制一运行，不管 JVM 的内存空间是否足够，总会回收该对象占用的内存。
+
 ```java
 string str = new String("abc");   // 强引用
 WeakReference<String> abcWeakRef = new WeakReference<String>(str);   // 弱引用
@@ -947,6 +962,10 @@ WeakReference<String> abcWeakRef = new WeakReference<String>(str);   // 弱引�
 - 任何时候都可能被垃圾收集器回收
 - 跟踪对象被垃圾收集器回收的活动，起哨兵作用
 - 必须和引用队列 ReferenceQueue 联合使用
+
+虚引用需要 PhantomReference 类来实现，它不能单独使用，必须和引用队列联合使用。
+
+**虚引用的主要作用是跟踪对象被垃圾回收的状态**。
 
 ```java
 string str = new String("abc");   // 强引用
