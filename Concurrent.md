@@ -442,7 +442,7 @@ Thread.java
 - 通过调用 suspend()和resume()方法
 
 ### 线程状态图
-(Java/images/线程状态图.jpeg)
+![线程状态图](images/线程状态图.jpeg)
 
 ## Java 锁
 
