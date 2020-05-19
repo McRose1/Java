@@ -784,7 +784,7 @@ MajorGC 会产生内存碎片，为了减少内存损耗，我们一般需要进
 
 ## GC 垃圾收集器
 Java 堆内存被划分为新生代和老年代两部分，新生代主要使用复制和标记-清除垃圾回收算法；老年代主要使用标记-整理垃圾回收算法，因此 Java 虚拟机针对新生代和老年代分别提供了多种不同的垃圾收集器，JDK1.6 中 Sun HotSpot 虚拟机的垃圾收集器如下：
-[!GC Collector](images/GC%20collector.png)
+![GC Collector](images/GC%20collector.png)
 
 JVM 的运行模式：
 - Server
@@ -794,17 +794,35 @@ java -version -> Server VM
 
 ### 新生代常见的垃圾收集器：
 
-#### Serial 收集器（-XX:+UseSerialGC，复制算法）
+#### Serial 垃圾收集器（-XX:+UseSerialGC，复制算法）
 - 单线程收集，进行垃圾收集时，必须暂停所有工作线程
 - 简单高效，Client 模式下默认的新生代收集器
 
-#### Parnew 收集器（-XX:+UseParNewGC，复制算法）
+**Serial 是最基本的垃圾收集器，使用复制算法**，曾经是 JDK1.3.1 之前新生代唯一的垃圾收集器。
+
+Serial 是一个单线程的收集器，它不但只会使用一个 CPU 或一条线程去完成垃圾收集工作，并且在进行垃圾收集的同时，必须暂停其他所有的工作线程，直到垃圾收集结束。
+
+Serial 垃圾收集器虽然在收集垃圾过程中需要暂停所有其他的工作线程，但是它简单高效，对于限定单个 CPU 环境来说，没有线程交互的开销，可以获得最高的单线程垃圾收集效率，因此 Serial 垃圾收集器依然是**Java 虚拟机运行在 Client 模式下默认的新生代垃圾收集器**。
+
+#### ParNew 垃圾收集器（-XX:+UseParNewGC，复制算法）
 - 多线程收集，其余的行为、特点和 Serial 收集器一样
 - 单核执行效率不如 Serial，在多核下执行才有优势
+
+ParNew 垃圾收集器其实是**Serial 收集器的多线程版本**，也使用复制算法，除了使用多线程进行垃圾收集之外，其余的行为和 Serial 收集器完全一样，ParNew 垃圾收集器在垃圾收集过程中同样也要暂停所有其他的工作线程。
+
+ParNew 收集器默认开启和 CPU 数目相同的线程数，可以通过 -XX:ParallelGCThreads 参数来限制垃圾收集器的线程数。
+
+ParNew 虽然是除了多线程外和 Serial 收集器几乎完全一样，但是 ParNew 垃圾收集器是**很多 Java 虚拟机运行在 Server 模式下新生代的默认垃圾收集器**。
 
 #### Parallel Scavenge 收集器（-XX:+UseParallelGC，复制算法）
 - 比起关注用户线程停顿时间，更关注系统的吞吐量（吞吐量 = 运行用户代码时间 /（运行用户代码时间+垃圾收集时间））
 - 在多核下执行才有优势，Server 模式下默认的新生代收集器
+
+Parallel Scavenge 收集器也是一个新生代垃圾收集器，同样使用复制算法，也是一个多线程的垃圾收集器，**它重点关注的是程序达到一个可控制的吞吐量**（Throughput，CPU 用于运行用户代码的时间 / CPU 总消耗时间）。
+
+高吞吐量可以最高效率地利用 CPU 时间，尽快地完成程序的运算任务，主要适用于在后台运算而不需要太多交互的任务。
+
+**自适应调节策略也是 Parallel Scavenge 收集器与 ParNew 收集器的一个重要区别**。
 
 ### 老生代常见的垃圾收集器：
 
@@ -812,8 +830,20 @@ java -version -> Server VM
 - 单线程收集，进行垃圾收集时，必须暂停所有工作线程
 - 简单高效，Client 模式下默认的老年代收集器
 
+**Serial Old 是 Serial 垃圾收集器老年代版本**，它同样是个单线程的收集器，使用标记-整理算法，这个收集器也主要是**运行在 Client 默认的 Java 虚拟机默认的老年代垃圾收器**。
+
+在 Server 模式下，主要有两个用途：
+1. 在 JDK1.5 之前版本中与新生代的 Parallel Scavenge 收集器搭配使用。
+2. 作为老年代中使用 CMS 收集器的后备垃圾收集方案。
+
 #### Parallel Old 收集器（-XX:+UseParallelOldGC，标记-整理算法）
 - 多线程，吞吐量优先
+
+Parallel Old 收集器是 Parallel Scavenge 的老年代版本，使用多线程的标记-整理算法，在 JDK1.6 才开始提供。
+
+在 JDK1.6 之前，新生代使用 Parallel Scavenge 收集器只能搭配老年代的 Serial Old 收集器，只能保证新生代的吞吐量优先，无法保证整体的吞吐量。
+
+**Parallel Old 正是为了在老年代同样提供吞吐量优先的垃圾收集器**，如果系统对吞吐量要求比较高，可以优先考虑新生代 Parallel Scavenge 和老年代 Parallel Old 收集器的搭配策略。
 
 #### CMS 收集器（-XX:+UseConcMarkSweepGC, 标记-清除算法）
 Concurrent Mark Sweep（CMS）收集器是一种老年代垃圾收集器，其**最主要目标是获取最短垃圾回收停顿时间**，和其他老年代使用标记-整理算法不同，它使用**多线程的标记-清除算法**。
