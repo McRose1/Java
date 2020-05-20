@@ -177,6 +177,58 @@ public class ThreadPoolDemo {
 }
 ```
 
+### Java 线程池
+利用 Executors 创建不同的线程池满足不同场景的需求：
+1. newFixedThreadPool(int nThreads)：指定工作线程数量的线程池
+2. newCachedThreadPool()：处理大量短时间工作任务的线程池，
+  2.1 试图缓存线程并重用，当无缓存线程可用时，就会创建新的工作线程；
+  2.2 如果线程闲置的时间超过阈值，则会被终止并移出缓存；
+  2.3 系统长时间闲置的时候，不会消耗什么资源
+3. newSingleThreadExecutor()：创建唯一的工作者线程来执行任务，如果线程异常结束，会有另一个线程取代它
+4. newSingleThreadScheduledExectutor() 与 newScheduledThreadPool(int corePoolSize)：定时或者周期性的工作调度，两者的区别在于单一工作线程还是多个线程
+5. newWorkStealingPool()：内部会构建 ForkJoinPool，利用 working-stealing 算法，并行地处理任务，不保证处理顺序
+
+Fork/Join 框架：
+- 把大任务分割成若干个小任务并行执行，最终汇总每个小任务结果后得到大任务结果的框架
+
+Work-Stealing 算法：某个线程从其他队列里窃取任务来执行
+
+**为什么要使用线程池**：
+- 降低资源消耗
+- 提高线程的可管理性
+
+**线程池的状态**：
+- RUNNING：能接受新提交的任务，并且也能处理阻塞队列中的任务
+- SHUTDOWN：不再接受新提交的任务，但可以处理存量任务
+- STOP：不再接受新提交的任务，也不处理存量任务
+- TIDYING：所有的任务都已终止
+- TERMINATED：terminated()方法执行完后进入该状态
+
+**线程池的大小如何选定**？
+- CPU 密集型：线程数 = 按照核数或者核数 +1 设定
+- I/O 密集型：线程数 = CPU 核数 * (1 + 平均等待时间/平均工作时间)
+
+#### ThreadPoolExecutor
+构造函数：
+- corePoolSize：核心线程数量
+- maximumPoolSize：线程不够用时能够创建的最大线程数
+- workQueue：任务等待队列
+- keepAliveTime：抢占的顺序不一定，看运气
+- threadFactory：创建新线程，Executors.defaultThreadFactroy()
+
+**handle：线程池的饱和策略**
+- AbortPolicy：直接抛出异常，这是默认策略
+- CallerRunsPolicy：用调用者所在的线程来执行任务
+- DiscardOldestPolicy：丢弃队列中靠最前的任务，并执行当前任务
+- DiscardPolicy：直接丢弃任务
+- 实现 RejectedExecutionHandler 接口的自定义 handler
+
+**新任务提交 execute 执行后的判断**：
+- 如果运行的线程少于 corePoolSize，则创建新线程来处理任务，即使线程池中的其他线程是空闲的；
+- 如果线程池中的线程数量大于等于 corePoolSize 且小于 maximumPoolSize，则只有当 workQueue 满时才创建新的线程去处理任务；
+- 如果设置的 corePoolSize 和 maximumPoolSize 相同，则创建的线程池的大小是固定的，这时如果有新任务提交，若 workQueue 未满，则将请求放入 workQueue 中，等待有空闲的线程去从 workQueue 中取任务并处理；
+- 如果允许的线程数量大于等于 maximumPoolSize，这时如果 workQueue 已经满了，则通过 handler 所指定的策略来处理任务
+
 ### 线程的状态
 6 个状态：
 - 新建（New）：创建后尚未启动的线程的状态
@@ -687,8 +739,35 @@ java.util.concurrent：提供了并发编程的解决方案
 - CAS 是 java.util.concurrent.atomic 包的基础
 - AQS 是 java.util.concurrent.locks 包以及一些常用类比如 Semaphore，ReentrantLock 等类的基础
 
+### CAS
+一种高效实现线程安全性的方法：
+- 支持原子更新操作，适用于计数器，序列发生器等场景
+- 属于乐观锁机制，号称 lock-free
+- CAS 操作失败时由开发者决定是继续尝试，还是执行别的操作
+
+CAS 思想：
+- 包含 3 个操作数 —— 内存位置（V）、预期原值（A）和新值（B）
+
+缺点：
+- 若循环时间长，则开销很大
+- 只能保证一个共享变量的原子操作
+- ABA 问题（解决：AtomicStampedReference）
+
+CAS 多数情况下对开发者来说是透明的
+- J.U.C 的 atomic 包提供了常用的原子性数据类型以及引用、数组等相关原子类型和更新操作工具，是很多线程安全程序的首选
+- Unsafe 类虽提供 CAS 服务，但因能够操作任意内存地址读写而有隐患
+- Java9 以后，可以使用 Variable Handle API 来替代 Unsafe
+
 ## J.U.C 包的分类
 ### 线程执行器（executor）
+J.U.C 的 3 个 Executor 接口：
+- Executor：运行新任务的简单接口，将任务提交和任务执行细节解耦
+```java
+Thread t = new Thread();
+executor.execute(t);      // 不需要调用 t.start();
+```
+- ExecutorService：具备管理执行器和任务声明周期的方法，提交任务机制更完善
+- ScheduledExecutorService：支持 Future 和定期执行任务
 
 ### 锁（locks）
 
