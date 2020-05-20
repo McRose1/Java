@@ -622,6 +622,56 @@ public class CoarseSync {
 - 当线程释放锁时，Java 内存模型会把该线程对应的本地内存中的共享变量刷新到主内存中；
 - 当线程获取锁时，Java 内存模型会把该线程对应的本地内存置为无效，从而使得被监视器保护的临界区代码必须从主内存中读取共享变量。
 
+### synchronized 和 ReentrantLock 的区别
+- synchronized 是关键字，ReentrantLock 是类
+- ReentrantLock 可以获取锁的等待时间进行设置，避免死锁
+- ReentrantLock 可以获取各种锁的信息
+- ReentrantLock 可以灵活地实现多路通知
+- **机制：sync 操作 Mark Word，lock 调用 Unsafe 类的 park() 方法**
+
+**ReentrantLock（再入锁）**：
+- 位于 java.util.concurrent.locks 包
+- 和 CountDownLatch、FutureTask、Semaphore 一样基于 AQS（Abstract Queued Synchronizer）实现
+- 能够实现比 synchronized 更细粒度的控制，如控制 fairness
+- 调用 lock() 之后，必须调用 unlock() 释放锁
+- 性能未必比 synchronized 高，并且也是可重入的
+
+**ReentrantLock 公平性的设置**：
+- ReentrantLock fairLock = nwe ReentrantLock(true);
+- 参数为 true 时，倾向于将锁赋予等待时间最久的线程
+- 公平锁：获取锁的顺序按先后调用 lock 方法的顺序（慎用）
+- 非公平锁：抢占的顺序不一定，看运气
+- synchronized 是非公平锁
+
+ReentrantLockDemo.java
+```java
+public class ReentrantLockDemo implements Runnable {
+  private static ReentrantLock lock = new ReentrantLock(true);
+  @Override 
+  public void run() {
+    while (true) {
+      try {
+        lock.lock();
+        System.out.println(Thread.currentThread().getName() + " get lock");
+        Thread.sleep(1000);
+      } catch (Exception e) {
+        e.printStackTrace();
+      } finally {
+        lock.unlock();
+      }
+    }
+  }
+}
+```
+
+**ReentrantLock 将锁对象化**：
+- 判断是否有线程，或者某个特定线程，在排队等待获取锁
+- 带超时的获取锁的尝试
+- 感知有没有成功获取锁
+
+**是否能将 wait\notify\notifyAll 对象化**？
+- java.util.concurrent.locks.Condition
+
 ## Java 锁
 
 ### 乐观锁
@@ -677,8 +727,30 @@ java.util.concurrent：提供了并发编程的解决方案
 6. LinkedTransferQueue：一个由链表结构组成的无界阻塞队列
 7. LinkedBlockingDeque：一个由链表结构组成的双向阻塞队列
 
+ArrayBlockingQueue.java
+```java
+/**
+  * Creates an {@code ArrayBlockingQueue} with the given (fixed) capacity and the specified access policy.
+  *
+  * @param capacity the capacity of this queue 
+  * @param fair if {@code true} then queue accesses for threads blocked on insertion or removal, are processes in FIFO order;
+  *        if {@code false} the access order is unspecified.
+  * @throws illegalArgumentException if {@code capacity < 1}
+  */
+  public ArrayBlockingQueue(int capacity, boolean fair) {
+    if (capacity <= 0) {
+      throw new IllegalArgumentException();
+    }
+    this.items = new Object[capacity];
+    lock = new ReentrantLock(fair);
+    notEmpty = lock.newCondition();
+    notFull = lock.newCondition();
+  }
+```
 
-
+## 什么是 Java 内存模型中的 happends-before
+**Java 内存模型 JMM**：
+Java 内存模型（即 Java Memory Model，JMM）本身是一种抽象的概念，并不真实存在，它描述的是一组规则或规范，通过这组规范定义了程序中各个变量（包括实例字段，静态字段和构成数组对象的元素）的访问方式。
 
 
 
