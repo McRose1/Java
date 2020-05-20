@@ -750,7 +750,120 @@ ArrayBlockingQueue.java
 
 ## 什么是 Java 内存模型中的 happends-before
 **Java 内存模型 JMM**：
+
 Java 内存模型（即 Java Memory Model，JMM）本身是一种抽象的概念，并不真实存在，它描述的是一组规则或规范，通过这组规范定义了程序中各个变量（包括实例字段，静态字段和构成数组对象的元素）的访问方式。
+
+### JMM 中的主内存和工作内存
+
+**JMM 中的主内存**：
+- 存储 Java 实例对象
+- 包括成员变量、类信息、常量、静态变量等
+- 属于数据共享的区域，多线程并发操作时会引发线程安全问题
+
+**JMM 中的工作内存**：
+- 存储当前方法的所有本地变量信息，本地变量对其他线程不可见
+- 字节码行号指示器、Native 方法信息
+- 属于线程私有数据区域，不存在线程安全问题
+
+**主内存与工作内存的数据存储类型以及操作方式归纳**：
+- 方法里的基本数据类型本地变量将直接存储在工作内存的栈帧结构中
+- 引用类型的本地变量：引用存储在工作内存中，实例存储在主内存中
+- 成员变量、static 变量、类信息均会被存储在主内存中
+- 主内存共享的方式是线程各拷贝一份数据到工作内存，操作完成后刷新回主内存
+
+**JMM 如何解决可见性问题**：
+指令重排序需要满足的条件：
+- 在单线程环境下不能改变程序运行的结果
+- 存在数据依赖关系的不允许重排序
+**即：无法通过 happens-before 原则推导出来的，才能进行指令的重排序**
+
+**A 操作的结果需要对 B 操作可见，则 A 与 B 存在 happens-before 关系**：
+```java
+i = 1;  // 线程 A 执行
+j = i;  // 线程 B 执行
+```
+
+**happens-before 的八大原则**：
+1. 程序次序规则：一个线程内，按照代码顺序，书写在前面的操作先行发生于书写在后面的操作；
+2. 锁定规则：一个 unLock 操作先行发生于后面对同一个锁的 lock 操作；
+3. volatile 变量规则：对一个变量的写操作先行发生于后面对这个变量的读操作；
+4. 传递规则：如果操作 A 先行发生于操作 B，而操作 B 又先行发生于操作 C，则可以得出操作 A 先行发生于操作 C；
+5. 线程启动规则：Thread 对象的 start()方法先行发生于此线程的每一个动作；
+6. 线程中断规则：对线程 interrupt()方法的调用先行发生于被中断线程的代码检测到中断事件的发生；
+7. 线程终结规则：线程中所有的操作都先行发生于线程的终止检测，我们可以通过 Thread.join()方法结束、Thread.isAlive()的返回值手段检测到线程已经终止执行；
+8. 对象终结规则：一个对象的初始化完成先行发生于他的 finalize()方法的开始；
+
+**happens-before 的概念**：
+如果两个操作不满足上述任意一个 happens-before 规则，那么这两个操作就没有顺序的保障，JVM 可以对这两个操作进行重排序；如果操作 A happens-before 操作 B，那么操作 A 在内存是所做的操作对操作 B 都是可见的。
+
+#### volatile
+JVM 提供的轻量级同步机制
+- 保证被 volatile 修饰的共享变量对所有线程总是可见的
+- 禁止指令重排序优化
+
+```java
+public class VolatileVisibility {
+  public static volatile int value = 0;       // volatile 在这里可省略
+  
+  public synchronized static void increase() {
+    value++;
+  }
+}
+```
+
+volatile 变量为何立即可见？
+- 当写一个 volatile 变量时，JMM 会把该线程对应的工作内存中的共享变量值刷新到主内存中；
+- 当读取一个 volatile 变量时，JMM 会把该线程对应的工作内存置为无效。
+
+volatile 如何禁止重排优化？
+
+内存屏障（Memory Barrier）：
+1. 保证特定操作的执行顺序
+2. 保证某些变量的内存可见性
+
+通过插入内存屏障指令禁止在内存屏障前后的指令执行重排序优化
+
+强制刷出各种 CPU 的缓存数据，因此任何 CPU 上的线程都能读取到这些数据的最新版本
+
+**单例的双重检测实现**：
+```java
+public class Singleton {
+  // 禁止指令重排优化
+  private volatile static Singleton instance;
+  
+  private Singleton() {}
+  
+  public static Singleton getInstance() {
+    // 第一次检测
+    if (instance == null) {
+      // 同步
+      synchronized (Singleton.class) {
+        if (instance == null) {
+          // 多线程环境下可能会出现问题的地方
+          // memory = allocate() 1. 分配对象内存空间
+          // instance(memory) 2. 初始化对象
+          // instance = memory 3. 设置 instance 指向刚分配的内存地址，此时 instance != null
+          // 可能会发生重排序优化，即变成 132，instance != null，但是对象还没有初始化完成
+          instance = new Singleton();
+        }
+      }
+    }
+    return instance;
+  }
+}
+```
+
+**volatile 和 synchronized 的区别**：
+1. volatile 本质是在告诉 JVM 当前变量在寄存器（工作内存）中的值是不确定的，需要从主存中读取；synchronized 则是锁定当前变量，只有当前线程可以访问该变量，其他线程被阻塞住直到该线程完成遍历操作位置
+2. volatile 仅能使用在变量级别；synchronized 则可以使用在变量、方法和类级别
+3. volatile 仅能实现变量的修改可见性，不能保证原子性；而 synchronized 则可以保证变量修改的可见性和原子性
+4. volatile 不会造成线程的阻塞；synchronized 可能会造成线程的阻塞
+5. volatile 标记的变量不会被编译器优化；synchronized 标记的变量可以被编译器优化
+
+**JMM 与 Java 内存区域划分是不同的概念层次**：
+- JMM 描述的是一组规则，围绕原子性、有序性、可见性展开
+- 相似点：存在共享区域和私有区域
+
 
 
 
