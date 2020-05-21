@@ -1,4 +1,4 @@
-# Java 集合
+# Java 集合框架
 
 ## Interface 继承关系和实现
 集合类存放于 java.util 包中，主要有 3 种：set（集合）、list（列表包含 Queue）和 map（映射）。
