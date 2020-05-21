@@ -4,10 +4,24 @@
 集合类存放于 java.util 包中，主要有 3 种：set（集合）、list（列表包含 Queue）和 map（映射）。
 
 1. Collection：Collection 是集合 List、Set、Queue 的最基本的接口。
+    - List
+    - Set
+    - Queue
 2. Iterator：迭代器，可以通过迭代器遍历集合中的数据
 3. Map：是映射表的基础接口
 
 ## List
+- 特点
+    - 有序（存储和取出的顺序）
+    - 可重复
+    - 可通过索引值操作元素
+- 分类
+    - 底层是数组，查询快，增删慢
+        - ArrayList —— 线程不安全，效率高
+        - Vector —— 线程安全，效率低
+    - 底层是链表，查询慢，增删快
+        - LinkedList —— 线程不安全，效率高
+
 Java 的 List 是非常常用的数据类型。List 是有序的 Collection。Java List 一共 3 个实现类：ArrayList, LinkedList, Vector
 
 ### ArrayList（数组）
@@ -26,6 +40,19 @@ ArrayList 是最常用的 List 实现类，内部是通过数组实现的，它�
 Vector 和 ArrayList 一样，也是通过数组实现的，不同的是它**支持线程的同步，即某一时刻只有一个线程能够写 Vector**，避免多线程同时写而引起的不一致性，但实现同步需要很高的花费，因此，访问它比访问 ArrayList 慢。
 
 ## Set
+- 特点
+    - 无序（存储和取出的顺序）
+    - 元素唯一
+- 分类
+    - 底层是 HashMap
+        - HashSet：保证元素唯一性
+            - hashCode()
+            - equals()
+    - 底层是二叉树
+        - TreeSet：保证元素排序
+            - 自然顺序，让对象所属的类去实现 comparable 接口，无参构造
+            - 比较器接口 comparator，带参构造
+
 Set 注重独一无二的性质，该体系集合用于存储无序（存入和取出的顺序不一定相同）元素，**值不能重复**。
 
 对象的相等性本质是对象的 hashCode 值（Java 是依据对象的内存地址计算出的此序号）判断的，**如果想要让两个不同的对象视为相等的，就必须覆盖 Object 的 hashCode 方法和 equals 方法**。
@@ -44,7 +71,76 @@ HashSet 通过 hashCode 值来确定元素在内存中的位置，**一个 hashC
 - key: Set<K> keySet();   -> 唯一
 - values: Collection<V> values(); -> 允许重复
 
+### HashMap（数组+链表+红黑树）
+HashMap 根据键的 hashCode 值存储数据，大多数情况下可以直接定位到它的值，因而具有很快的访问速度，但遍历顺序却是不确定的。
+
+HashMap 最多只允许一条记录的键为 null，允许多条记录的值为 null。
+
+HashMap 非线程安全，即任一时刻可以有多个线程同时写 HashMap，可能会导致数据的不一致。
+
+如果需要满足线程安全，可以用 Collections 的 synchronizedMap 方法时 HashMap 具有线程安全的能力，或者使用 ConcurrentHashMap。
+
+SafeHashMapDemo.java
+```java
+public class SafeHashMapDemo {
+    public static void main(String[] args) {
+        Map hashMap = new HashMap<>();
+        Map safeHashMap = Collections.synchronizedMap(hashmap);
+        safeHashMap.put("aa", "1");
+        safeHashMap.put("bb", "2");
+        System.out.println(safeHashMap.get("bb"));
+    }
+}
+```
+synchronizedMap 和 HashTable 的实现几乎一样，多线程由于都是串行执行所以效率很低
+
+
+HashMap: put 方法逻辑：
+1. 如果 HashMap 未被初始化过，则初始化
+2. 对 Key 求 Hash 值，然后再计算下标
+3. 如果没有哈希碰撞，直接放入桶中
+4. 如果碰撞了，以链表的方式链接到后面
+5. 如果链表长度超过阈值，就把链表转成红黑树
+6. 如果链表长度低于 6，就把红黑树转回链表
+7. 如果节点已经存在就替换旧值
+8. 如果桶满了（容量 16 * 加载因子 0.75），就需要 resize（扩容 2 倍后重排）
+
+HashMap：如何有效减少碰撞？
+- 扰动函数：促使元素位置分部均匀，减少碰撞几率（目的是让不同的对象返回不同的 hashCode）
+- 使用 final 对象（不可变性使得能够缓存不同键的 hashCode，可以防止键值改变，将会提高获取对象的速度），并采用合适的 equals() 和 hashCode() 方法（使用String, Integer 这样的 wrap 类作为键有好处因为 String 是 final 的并且已经重写了 equals() 和 hashCode() 方法）
+
+HashMap：扩容所带来的问题：
+- 多线程环境下，调整大小会存在条件竞争，容易造成死锁
+- rehashing 是一个比较耗时的过程
+
+HashMap 知识点回顾：
+- 成员变量：数据结构，树化阈值
+- 构造函数：延迟创建
+- put 和 get 的流程
+- 哈希算法，扩容，性能
+
+#### Java7 实现
+大方向上，HashMap 里面是一个数组，然后数组中每个元素是一个单向链表。
+
+每个元素的实体是嵌套类 Entry 的实例，Entry 包含 4 个属性：**key, value, hash值, 和用于单向链表的 next**。
+
+1. capacity：当前数组容量，始终保持 2^n，可以扩容，扩容后数组大小为当前的 2 倍。
+2. loadFactor：负载因子，默认为 0.75.
+3. threshold：扩容的阈值，等于 capacity * loadFactor
+
+#### Java8 实现
+Java8 对 HashMap 进行了一些修改，**最大的不同就是利用了红黑树，所以其由 数组+链表+红黑树 组成。
+
+根据 Java7 HashMap，我们知道查找的时候，根据 hash 值我们能够快速定位到数组的具体下标，但是之后的话，**需要顺着链表一个个比较下去才能找到我们需要的，时间复杂度取决于链表的长度，即 O(n)**。
+
+为了降低这部分的开销，在 Java8 中，**当链表中的元素超过了 8 个以后，会将链表转换为红黑树**， 在这些位置进行查找的时候可以降低时间复杂度为 O(logN)
+
 ### HashMap、HashTable、ConcurrentHashMap 之间的区别
+- HashMap 线程不安全，数组 + 链表 + 红黑树
+- HashTable 线程安全，锁住整个对象，数组 + 链表
+- ConcurrentHashMap 线程安全，CAS + 同步锁，数组 + 链表 + 红黑树
+- HashMap 的 key、value 均可为 null，而其他的两个类不支持
+
 HashMap（Java8 之前）：数组（长度默认 16）+链表，节点叫 Entry
 
 hash(key.hashCode()) % len(16)  -> 实际上是通过位运算进行的，比取模运算效率更高
@@ -172,62 +268,116 @@ final Node<K, V>[] resize() {
 }
 ```
 
-HashMap: put 方法逻辑：
-1. 如果 HashMap 未被初始化过，则初始化
-2. 对 Key 求 Hash 值，然后再计算下标
-3. 如果没有哈希碰撞，直接放入桶中
-4. 如果碰撞了，以链表的方式链接到后面
-5. 如果链表长度超过阈值，就把链表转成红黑树
-6. 如果链表长度低于 6，就把红黑树转回链表
-7. 如果节点已经存在就替换旧值
-8. 如果桶满了（容量 16 * 加载因子 0.75），就需要 resize（扩容 2 倍后重排）
+**如何优化 Hashtable**？
+- 通过锁细粒度化，将整锁拆解成多个锁进行优化
+    - 早期的 ConcurrentHashMap：通过分段锁 Segment 来实现（数组+链表）
+    - 当前的 ConcurrentHashMap：CAS + synchronized 使锁更细化（数组+链表+红黑树）
 
-HashMap：如何有效减少碰撞？
-- 扰动函数：促使元素位置分部均匀，减少碰撞几率（目的是让不同的对象返回不同的 hashCode）
-- 使用 final 对象（不可变性使得能够缓存不同键的 hashCode，可以防止键值改变，将会提高获取对象的速度），并采用合适的 equals() 和 hashCode() 方法（使用String, Integer 这样的 wrap 类作为键有好处因为 String 是 final 的并且已经重写了 equals() 和 hashCode() 方法）
+### ConcurrentHashMap
+ConcurrentHashMap.java
+```java
+public V put(K key, V value) {
+    return putVal(key, value, false);
+}
 
-Hashmap：扩容所带来的问题：
-- 多线程环境下，调整大小会存在条件竞争，容易造成死锁
-- rehashing 是一个比较耗时的过程
+/** Implementation for put and putIfAbsent */
+final V putVal(K key, V value, boolean onlyIfAbsent) {
+    if (key == null || value == null) throw new NullPointerException();
+    int hash = spread(key.hashCode());
+    int binCount = 0;
+    for (Node<K, V>[] tab = table;;) {
+        Node<K, V> f; int n, i, fh; K fk; V fv;
+        if (tab == null || (n = tab.length) == 0) {
+            tab = initTable();
+        }
+        else if ((f = tabAt(tab, i = (n - 1) & hash)) == null) {
+            if (casTabAt(tab, i, null, new Node<K, V>(hash, key, value))) {
+                break;                  // no lock when adding to empty bin
+            }
+        }
+        else if ((fh = f.hash) == MOVED) {
+            tab = helpTransfer(tab, f);
+        }
+        else if (onlyIfAbsent // check first node without acquring lock
+                && fh == hash 
+                && ((fk = f.key) == key || (fk != null && key.equals(fk)))
+                && (fb = f.val) != null) {
+            return fv;
+        }
+        // 发生哈希碰撞
+        else {
+            V oldVal = null;
+            synchronized (f) {
+                if (tabAt(tab, i) == f) {
+                    // 链表头结点
+                    if (fh >= 0) {
+                        binCount = 1;
+                        for (Node<K, V> e = f;; ++binCount) {
+                            K ek;
+                            if (e.hash == hash && 
+                                ((ek = e.key) == key ||
+                                (ek != null && key.equals(ek))) {
+                                if (!onlyIfAbsent) {
+                                    e.val = value;
+                                    break;
+                                }
+                            }
+                            Node<K, V> pred = e;
+                            if ((e = e.next) == null) {
+                                pred.next = new Node<K, V>(hash, key, value);
+                                break;
+                            }
+                        }
+                    }
+                    // 红黑树的节点
+                    else if (f instanceof TreeBin) {
+                        Node<K, V> p;
+                        binCount = 2;
+                        if ((p = ((TreeBin<K, V>)f).putTreeVal(hash, key, value)) != null) {
+                            oldVal = p.val;
+                            if (!onlyIfAbsent) {
+                                p.val = value;
+                            }
+                        }
+                    }
+                    // 可能存在缓存
+                    else if (f instanceof ReservationNode) {
+                        throw new IllegalStateException("Recursive update");
+                    }
+                }
+            }
+            if (binCount != 0) {
+                if (binCount >= TREEIFY_THRESHOLD) {
+                    treeifyBin(tab, i);
+                }
+                if (oldVal != null) {
+                    return oldVal;
+                }
+                break;
+            }
+        }
+    }
+    addCount(1L, binCount);
+    return null;
+}
+```
 
-HashMap 知识点回顾：
-- 成员变量：数据结构，树化阈值
-- 构造函数：延迟创建
-- put 和 get 的流程
-- 哈希算法，扩容，性能
+**ConcurrentHashMap：put 方法的逻辑**：
+1. 判断 Node[] 数组是否初始化，没有则进行初始化操作
+2. 通过 hash 定位数组的索引坐标，是否有 Node 节点，如果没有则使用 CAS 进行添加（链表的头节点），添加失败则进入下次循环
+3. 检查到内部正在扩容，就帮助它一块扩容
+4. 如果 f != null，则使用 synchronized 锁住 f 元素（链表/红黑二叉树的头元素）
+    1. 如果是 Node（链表结构）则执行链表的添加操作
+    2. 如果是 TreeNode（树形结构）则执行树添加操作
+5. 判断链表长度已经达到临界值 8，当然这个 8 是默认值，可以自行调整，当节点数超过这个值就需要把链表转换为树结构。
 
-### HashMap（数组+链表+红黑树）
-HashMap 根据键的 hashCode 值存储数据，大多数情况下可以直接定位到它的值，因而具有很快的访问速度，但遍历顺序却是不确定的。
+**ConcurrentHashMap 总结**：比起 Segment，锁拆得更细
+- 首先使用无锁操作 CAS 插入头节点，失败则循环重试
+- 若头节点已存在，则尝试获取头节点的同步锁，再进行操作
 
-HashMap 最多只允许一条记录的键为 null，允许多条记录的值为 null。
-
-HashMap 非线程安全，即任一时刻可以有多个线程同时写 HashMap，可能会导致数据的不一致。
-
-如果需要满足线程安全，可以用 Collections 的 synchronizedMap 方法时 HashMap 具有线程安全的能力，或者使用 ConcurrentHashMap。
-
-#### Java7 实现
-大方向上，HashMap 里面是一个数组，然后数组中每个元素是一个单向链表。
-
-每个元素的实体是嵌套类 Entry 的实例，Entry 包含 4 个属性：**key, value, hash值, 和用于单向链表的 next**。
-
-1. capacity：当前数组容量，始终保持 2^n，可以扩容，扩容后数组大小为当前的 2 倍。
-2. loadFactor：负载因子，默认为 0.75.
-3. threshold：扩容的阈值，等于 capacity * loadFactor
-
-#### Java8 实现
-Java8 对 HashMap 进行了一些修改，**最大的不同就是利用了红黑树，所以其由 数组+链表+红黑树 组成。
-
-根据 Java7 HashMap，我们知道查找的时候，根据 hash 值我们能够快速定位到数组的具体下标，但是之后的话，**需要顺着链表一个个比较下去才能找到我们需要的，时间复杂度取决于链表的长度，即 O(n)**。
-
-为了降低这部分的开销，在 Java8 中，**当链表中的元素超过了 8 个以后，会将链表转换为红黑树**， 在这些位置进行查找的时候可以降低时间复杂度为 O(logN)
-
-
-
-
-
-
-
-
+别的需要注意的点：
+- size()方法和 mappingCount()方法的异同，两者计算是否准确？
+- 多线程环境下如何进行扩容？
 
 
 
