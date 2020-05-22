@@ -283,19 +283,28 @@ public V put(K key, V value) {
 /** Implementation for put and putIfAbsent */
 final V putVal(K key, V value, boolean onlyIfAbsent) {
     if (key == null || value == null) throw new NullPointerException();
+    // 得到 hash 值
     int hash = spread(key.hashCode());
+    // 用于记录相应链表的长度
     int binCount = 0;
     for (Node<K, V>[] tab = table;;) {
         Node<K, V> f; int n, i, fh; K fk; V fv;
+        // 如果数组为空，进行数组初始化
         if (tab == null || (n = tab.length) == 0) {
+            // 初始化数组
             tab = initTable();
         }
+        // 找该 hash 值对应的数组下标，得到第一个节点 f
         else if ((f = tabAt(tab, i = (n - 1) & hash)) == null) {
+            // 如果数组该位置为空，用一次 CAS 操作将这个新值放入其中，break 掉，put 操作直接到最下面的代码段
+            // 如果 CAS 失败，说明有并发操作，进入下一个循环
             if (casTabAt(tab, i, null, new Node<K, V>(hash, key, value))) {
                 break;                  // no lock when adding to empty bin
             }
         }
+        // 如果此时在扩容
         else if ((fh = f.hash) == MOVED) {
+            // 帮助数据迁移
             tab = helpTransfer(tab, f);
         }
         else if (onlyIfAbsent // check first node without acquring lock
@@ -307,13 +316,17 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
         // 发生哈希碰撞
         else {
             V oldVal = null;
+            // 获取数组该位置的头节点的监视器锁
             synchronized (f) {
                 if (tabAt(tab, i) == f) {
-                    // 链表头结点
+                    // 头节点的 hash 值大于 9，说明是链表
                     if (fh >= 0) {
+                        // 用于累加，记录链表的长度
                         binCount = 1;
+                        // 遍历链表
                         for (Node<K, V> e = f;; ++binCount) {
                             K ek;
+                            // 如果发现了“相等”的 key，判断是否要进行值覆盖
                             if (e.hash == hash && 
                                 ((ek = e.key) == key ||
                                 (ek != null && key.equals(ek))) {
@@ -322,6 +335,7 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
                                     break;
                                 }
                             }
+                            // 遍历到链表的最末端，将这个新值放到链表的最后面
                             Node<K, V> pred = e;
                             if ((e = e.next) == null) {
                                 pred.next = new Node<K, V>(hash, key, value);
@@ -333,6 +347,7 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
                     else if (f instanceof TreeBin) {
                         Node<K, V> p;
                         binCount = 2;
+                        // 调用红黑树的插值方法插入新节点
                         if ((p = ((TreeBin<K, V>)f).putTreeVal(hash, key, value)) != null) {
                             oldVal = p.val;
                             if (!onlyIfAbsent) {
@@ -346,7 +361,9 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
                     }
                 }
             }
+            // binCount != 0 说明上面做过链表操作
             if (binCount != 0) {
+                // 判断是否要将链表转换为红黑树，临界值和 HashMap 一样，也是 8
                 if (binCount >= TREEIFY_THRESHOLD) {
                     treeifyBin(tab, i);
                 }
