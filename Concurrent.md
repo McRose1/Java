@@ -800,9 +800,11 @@ public class ReentrantLockDemo implements Runnable {
 **是否能将 wait\notify\notifyAll 对象化**？
 - java.util.concurrent.locks.Condition
 
-**synchronized 和 ReentrantLock 的区别**
+#### Synchronized 和 ReentrantLock 的区别
 - synchronized 是关键字，ReentrantLock 是类
 - ReentrantLock 通过方法 lock() 与 unlock() 来进行加锁与解锁操作，与**synchronized 会被 JVM 自动解锁机制不同，ReentrantLock 加锁后需要手动进行解锁**。为了避免程序出现异常而无法正常解锁的情况，使用 ReentrantLock 必须在 finally 控制块中进行解锁操作。
+- synchronized 不可中断，除非抛出异常或者正常运行完成，ReentrantLock 是可中断的
+- synchronized 非公平锁，ReentrantLock 可以设置公平或非公平锁
 - ReentrantLock 可以获取锁的等待时间进行设置，避免死锁
 - ReentrantLock 可以获取各种锁的信息
 - ReentrantLock 可以灵活地实现多路通知
