@@ -581,6 +581,25 @@ synchronized 可以把任意一个非 null 的对象当做锁。**它属于独�
 3. synchronized 作用于一个对象实例时，锁住的是所有以该对象为锁的代码块。它有多个队列，当多个线程一起访问某个对象监视器的时候，对象监视器会将这些线程存储在不同的容器中。
 
 #### synchronized 核心组件
+1. Wait Set：调用 wait 方法被阻塞的那些线程被放置在这里；
+2. Contention List：**竞争队列**，所有请求锁的线程首先被放在这个竞争队列中；
+3. Entry List：Contention List 中那些**有资格成为候选资源的线程被移动到 Entry List 中**；
+4. OnDeck：任意时刻，**最多只有一个线程正在竞争锁资源，该线程被称为 OnDeck**；
+5. Owner：当前已经获取到锁资源的线程被称为 Owner；
+6. !Owner：当前释放锁的线程。
+
+#### synchronized 实现
+1. JVM 每次从队列的尾部取出一个数据用于锁竞争候选者（OnDeck），但是并发情况下，ContentionList 会被大量的并发线程进行 CAS 访问，为了降低对尾部元素的竞争，JVM 会将一部分线程移动到 EntryList 中作为候选竞争线程。
+2. Owner 线程会在 unlock 时，将 ContentionList 中的部分线程迁移到 EntryList 中，并指定 EntryList 中的某个线程为 OnDeck 线程（一般是最先进去的那个线程）。
+3. Owner 线程并不直接把锁传递给 OnDeck 线程，而是把锁竞争的权利交给 OnDeck，OnDeck 需要重新竞争锁。这样虽然牺牲了一些公平性，但是能极大地提升系统的吞吐量，在 JVM 中，也把这种选择行为称之为“竞争切换”。
+4. OnDeck 线程获取到锁资源后会变为 Owner 线程，而没有得到锁资源的仍然停留在 EntryList 中。如果 Owner 线程被 wait 方法阻塞，则转移到 WaitSet 队列中，直到某个时刻通过 notify 或者 notifyAll 唤醒，会重新进去 EntryList 中。
+5. 处于 ContentionList、EntryList、WaitSet 中的线程都处于阻塞状态，该阻塞是由操作系统来完成的（Linux 内核下采用 pthread_mutex_lock 内核函数来实现）
+6. **synchronized 是非公平锁**。synchronized 在线程进入 ContentionList时，**等待的线程会先尝试自旋获取锁，如果获取不到就进入 ContentionList**，这明显对于已经进入队列的线程是不公平的，还有一个不公平的事情就是自旋获取锁的线程还可能直接抢占 OnDeck 线程的锁资源。
+7. 每个对象都有一个 monitor 对象，**加锁就是在竞争 monitor 对象**，代码块加锁是在前后分别加上 monitorenter 和 monitorexit 指令来实现的，方法加锁是通过一个标记位来判断的。
+8. synchronized **是一个重量级操作，需要调用操作系统相关接口**，性能是低效的，有可能给线程加锁消耗的时间比有用操作消耗的时间更多。
+9. Java1.6，synchronized 进行了很多的优化，有**自适应自旋锁、锁消除、锁粗化、轻量级锁及偏向锁**等，效率有了本质上的提高。在之后推出的 Java1.7 和 Java1.8 中，均对该关键字的实现机理做了优化。引入了**偏向锁和轻量级锁**。都是在对象头中有标记位，不需要经过操作系统加锁。
+10. **锁可以从偏向锁升级到轻量级锁，再升级到重量级锁**。这种升级过程叫做锁膨胀。
+11. JDK1.6 中默认是开启偏向锁和轻量级锁，可以通过 -XX:-UseBiasedLocking 来禁用偏向锁。
 
 #### synchronized 底层实现原理
 实现 synchronized 的基础
@@ -592,7 +611,7 @@ synchronized 可以把任意一个非 null 的对象当做锁。**它属于独�
 - 实例数据
 - 对齐填充
 
-#### Java 对象头
+##### Java 对象头
 
 **对象头的结构**：
 | 虚拟机位数 | 头对象结构 | 说明 |
@@ -608,7 +627,7 @@ synchronized 可以把任意一个非 null 的对象当做锁。**它属于独�
 - GC 标志（11）：空，不需要记录信息
 - 偏向锁（01）：线程 ID、Epoch、对象分代年龄、是否是偏向锁（1）
 
-#### Monitor 
+##### Monitor 
 每个 Java 对象天生自带了一把看不见的锁
 
 Monitor 锁的竞争、获取与释放
@@ -713,31 +732,48 @@ public class CoarseSync {
 - 当线程释放锁时，Java 内存模型会把该线程对应的本地内存中的共享变量刷新到主内存中；
 - 当线程获取锁时，Java 内存模型会把该线程对应的本地内存置为无效，从而使得被监视器保护的临界区代码必须从主内存中读取共享变量。
 
-### synchronized 和 ReentrantLock 的区别
-- synchronized 是关键字，ReentrantLock 是类
-- ReentrantLock 可以获取锁的等待时间进行设置，避免死锁
-- ReentrantLock 可以获取各种锁的信息
-- ReentrantLock 可以灵活地实现多路通知
-- **机制：sync 操作 Mark Word，lock 调用 Unsafe 类的 park() 方法**
-
-**ReentrantLock（再入锁）**：
+### ReentrantLock（再入锁）
 - 位于 java.util.concurrent.locks 包
 - 和 CountDownLatch、FutureTask、Semaphore 一样基于 AQS（Abstract Queued Synchronizer）实现
 - 能够实现比 synchronized 更细粒度的控制，如控制 fairness
 - 调用 lock() 之后，必须调用 unlock() 释放锁
 - 性能未必比 synchronized 高，并且也是可重入的
 
+ReentrantLock 继承接口 Lock 并实现了接口中定义的方法，它是一种可重入锁，除了能完成 synchronized 所能完成的所有工作外，还**提供了诸如可响应中断锁、可轮询锁请求、定时锁等避免多线程死锁的方法**。
+
+**Lock 接口的主要方法**：
+1. void lock()：执行此方法时，**如果锁处于空闲状态，当前线程将获取到锁**。相反，如果锁已经被其他线程持有，将禁用当前线程，直到当前线程获取到锁。
+2. boolean tryLock()：**如果锁可用，则获取锁，并立即返回 true，否则返回 false**。该方法和 lock()的区别在于，tryLock()只是“试图”获取锁，如果锁不可用，不会导致当前线程被禁用，当前线程仍然继续往下执行代码。而 lock()方法则是一定要获取到锁，如果锁不可用，就一直等待，在未获得锁之前，当前线程并不继续向下执行。
+3. void unlock()：执行此方法时，**当前线程将释放持有的锁**。锁只能由持有者释放，如果线程并不持有锁，却执行该方法，可能导致异常的发生。
+4. Condition newCondition()：**条件对象，获取等待通知组件**。该组件和当前的锁绑定，当前线程只有获取了锁，才能调用该组件的 await()方法，而调用后，当前线程将释放锁。
+5. getHoldCount()：查询当前线程保持此锁的次数，也就是执行此线程执行 lock 方法的次数。
+6. getQueueLength()：返回正等待获取此锁的线程估计数，比如启动 10 个线程，1 个线程获得锁，此时返回的是 9.
+7. getWaitQueueLength：(Condition condition)返回等待与此锁相关的给定条件的线程估计数。比如 10 个线程，用同一个 condition 对象，并且此时这 10 个线程都执行了 condition 对象的 await 方法，那么此时执行此方法返回 10.
+8. hasWaiters(Condition condition)：查询是否有线程等待与此锁有关的给定条件（condition），对于指定 condition 对象，有多少线程执行了 condition.await 方法
+9. hasQueuedThread(Thread thread)：查询给定线程是否等待获取此锁
+10. hasQueuedThreads()：是否有线程等待此锁
+11. isFair()：该锁是否公平锁
+12. isHeldByCurrentThread()：当前线程是否保持锁锁定，线程的执行 lock 方法的前后分别是 false 和 true
+13. isLock()：此锁是否有任意线程占用
+14. lockInterruptibly()：如果当前线程未被中断，获取锁
+15. tryLock()：尝试获得锁，尽在调用时锁未被线程占用，获得锁
+16. tryLock(long timeout TimeUnit unit)：如果锁在给定等待时间内没有被另一个线程保持，则获取该锁。
+
 **ReentrantLock 公平性的设置**：
-- ReentrantLock fairLock = nwe ReentrantLock(true);
+- ReentrantLock fairLock = new ReentrantLock(true);
 - 参数为 true 时，倾向于将锁赋予等待时间最久的线程
 - 公平锁：获取锁的顺序按先后调用 lock 方法的顺序（慎用）
+  - 公平锁指的是锁的分配机制是公平的，通常先对锁提出获取请求的线程会先被分配到锁
 - 非公平锁：抢占的顺序不一定，看运气
+  - JVM 按随机、就近原则分配锁的机制称为非公平锁，ReentrantLock 在构造函数中提供了是否公平锁的初始化方式，默认为非公平锁。
+  - 非公平锁实际执行的效率要远远超出公平锁，除非程序有特殊需求，否则最常用非公平锁的分配机制。
 - synchronized 是非公平锁
 
 ReentrantLockDemo.java
 ```java
 public class ReentrantLockDemo implements Runnable {
-  private static ReentrantLock lock = new ReentrantLock(true);
+  private static ReentrantLock lock = new ReentrantLock(false);      // 非公平锁
+  //private static ReentrantLock lock = new ReentrantLock(true);    // 公平锁
   @Override 
   public void run() {
     while (true) {
@@ -762,6 +798,14 @@ public class ReentrantLockDemo implements Runnable {
 
 **是否能将 wait\notify\notifyAll 对象化**？
 - java.util.concurrent.locks.Condition
+
+**synchronized 和 ReentrantLock 的区别**
+- synchronized 是关键字，ReentrantLock 是类
+- ReentrantLock 通过方法 lock() 与 unlock() 来进行加锁与解锁操作，与**synchronized 会被 JVM 自动解锁机制不同，ReentrantLock 加锁后需要手动进行解锁**。为了避免程序出现异常而无法正常解锁的情况，使用 ReentrantLock 必须在 finally 控制块中进行解锁操作。
+- ReentrantLock 可以获取锁的等待时间进行设置，避免死锁
+- ReentrantLock 可以获取各种锁的信息
+- ReentrantLock 可以灵活地实现多路通知
+- **机制：sync 操作 Mark Word，lock 调用 Unsafe 类的 park() 方法**
 
 ## J.U.C
 java.util.concurrent：提供了并发编程的解决方案
