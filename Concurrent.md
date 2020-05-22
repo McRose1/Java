@@ -801,12 +801,19 @@ public class ReentrantLockDemo implements Runnable {
 - java.util.concurrent.locks.Condition
 
 #### Synchronized 和 ReentrantLock 的区别
-- synchronized 是关键字，ReentrantLock 是类
-- ReentrantLock 通过方法 lock() 与 unlock() 来进行加锁与解锁操作，与**synchronized 会被 JVM 自动解锁机制不同，ReentrantLock 加锁后需要手动进行解锁**。为了避免程序出现异常而无法正常解锁的情况，使用 ReentrantLock 必须在 finally 控制块中进行解锁操作。
+**共同点**：
+- 都是用来协调多线程对共享对象、变量的访问
+- 都是可重入锁，同一线程可以多次获得同一个锁
+- 都保证了可见性和互斥性
+
+**不同点**：
+- synchronized 是关键字，JVM 级别的；ReentrantLock 是类，API 级别的
+- synchronized 隐式获得释放锁；ReentrantLock 显示获得释放锁
+  - ReentrantLock 通过方法 lock() 与 unlock() 来进行加锁与解锁操作，与**synchronized 会被 JVM 自动解锁机制不同，ReentrantLock 加锁后需要手动进行解锁**。
+  - **synchronized 在发生异常时，会自动释放线程占有的锁**，因此不会导致死锁现象发生；而 Lock出现异常时，如果没有主动通过 unlock()去释放锁，则很有可能造成死锁现象，因此使用 ReentrantLock 必须在 finally 控制块中进行解锁操作，也可以对获取锁的等待时间进行设置，避免死锁。
 - synchronized 不可中断，除非抛出异常或者正常运行完成，ReentrantLock 是可中断的
 - synchronized 非公平锁，ReentrantLock 可以设置公平或非公平锁
-- ReentrantLock 可以获取锁的等待时间进行设置，避免死锁
-- ReentrantLock 可以获取各种锁的信息
+- ReentrantLock 可以获取各种锁的信息（比如可以知道有没有成功获取锁）
 - ReentrantLock 可以灵活地实现多路通知
 - **机制：sync 操作 Mark Word，lock 调用 Unsafe 类的 park() 方法**
 
@@ -822,17 +829,51 @@ java.util.concurrent：提供了并发编程的解决方案
 - CAS 操作失败时由开发者决定是继续尝试，还是执行别的操作
 
 CAS 思想：
-- 包含 3 个操作数 —— 内存位置（V）、预期原值（A）和新值（B）
+- 包含 3 个操作数 —— 内存位置（V）、预期原值（E）和新值（N）
+
+**V 表示要更新的变量（内存值），E 表示预期值（旧的），N 表示新值。当且仅当 V 值等于 E 值时，才会将 V 的值设为 N，如果 V 值和 E 值不同，则说明已经有其他线程做了更新，则当前线程什么都不做。**
+
+相对于 synchronized 这种阻塞算法，CAS 是非阻塞算法的一种常见实现。**由于一般 CPU 切换时间比 CPU 指令集操作更长**，所以 J.U.C 在性能上有了很大的提升。
+
+CAS 基于乐观锁机制，即总是认为自己可以成功完成操作。**当多个线程同时使用 CAS 操作一个变量时，只有一个会胜出，并成功更新，其余均会失败。失败的线程不会被挂起，仅是被告知失败，并且允许再次尝试，当然也允许失败的线程放弃操作**。基于这样的原理，CAS 操作即使没有锁，也可以发现其他线程对当前线程的干扰，并进行恰当的处理。
 
 缺点：
 - 若循环时间长，则开销很大
 - 只能保证一个共享变量的原子操作
 - ABA 问题（解决：AtomicStampedReference）
+  - **CAS 算法实现的一个重要前提是需要取出内存中某时刻的数据，而在下一时刻进行比较并替换，在这个时间差中会导致数据的变化**
+    - 比如**线程①从内存为止 V 取出 A**，这时候**另一个线程②也从内存取出 A**，并且**线程②进行了一系列操作将 V 变成 B 然后又变为 A**，这时候**线程①进行 CAS 操作发现内存中仍然是 A**，然后线程①操作成功。尽管线程①的 CAS 操作成功，但是不能代表这个过程就是没有问题的。
+  - 部分乐观锁的实现是通过版本号（version）的方式来解决 ABA 问题，乐观锁每次在执行数据的修改操作时，都会带上一个版本号，一旦版本号和数据的版本号一致就可以执行修改操作并对版本号执行+1 操作，否则就执行失败。因为每次操作都会导致版本号增加，所以不会出现 ABA 问题。
 
 CAS 多数情况下对开发者来说是透明的
 - J.U.C 的 atomic 包提供了常用的原子性数据类型以及引用、数组等相关原子类型和更新操作工具，是很多线程安全程序的首选
+  - 基本的特性就是在多线程环境下，当有多个线程同时执行这些类的实例包含的方法时，具有排他性，**即当某个线程进入方法，执行其中的指令时，不会被其他线程打断，而别的线程就像自旋锁一样，一直等到该方法执行完成，才由 JVM 从等待队列中选择另一个线程进入**
 - Unsafe 类虽提供 CAS 服务，但因能够操作任意内存地址读写而有隐患
 - Java9 以后，可以使用 Variable Handle API 来替代 Unsafe
+
+```java
+public class AtomicInteger extends Number inplements java.io.Serializable {
+  private volatile int value;
+  public final int get() {
+    return value;
+  }
+  public final int getAndIncrement() {
+    for (;;) {    // CAS 自旋，一直尝试，直到成功
+      int current = get();
+      int next = current + 1;
+      if (compareAndSet(current, next)) {
+        return current;
+      }
+    }
+  } 
+  public final boolean compareAndSet(int expect, int update) {
+    return unsafe.compareAndSwapInt(this, valueOffset, expect, update);
+  }
+}
+```
+getAndIncrement 采用了 CAS 操作，每次从内存中读取数据然后将此数据和+1后的结果进行 CAS 操作，如果成功就返回结果，否则重试直到成功为止。
+
+而 compareAndSet 利用 JNI 来完成 CPU 指令的操作
 
 ## J.U.C 包的分类
 ### 线程执行器（executor）
