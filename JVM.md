@@ -39,7 +39,7 @@ Java 源文件通过编译器，能够产生相应的 .class 文件，也就是�
   - 方法区（Method Area）
   - 堆（Heap）
   - 虚拟机栈（VM Stack）
-  - 本地方法栈（）
+  - 本地方法栈（Native Method Stack）
   - 程序计数器（PC Register）
 - 执行引擎：对命令进行解析
   - 即时编译器（JITCompiler）
