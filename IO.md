@@ -72,7 +72,7 @@ while (true) {
   }
 }
 ```
-但是对于非阻塞 IO 就有一个非常严重的问题，**在 while 循环中需要不断地去询问内核数据是否就绪，这样会导致 CPU 占用率非常高**，一次你一般情况下很少使用 while 循环这种方式来获取数据。
+但是对于非阻塞 IO 就有一个非常严重的问题，**在 while 循环中需要不断地去询问内核数据是否就绪，这样会导致 CPU 占用率非常高**，因此一般情况下很少使用 while 循环这种方式来获取数据。
 
 ```java
 public void serve(int port) throws IOException {
