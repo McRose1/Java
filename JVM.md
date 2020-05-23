@@ -48,6 +48,8 @@ Java 源文件通过编译器，能够产生相应的 .class 文件，也就是�
   - 本地方法库（Native Method Libraries）
 - 类加载器子系统（Class Loader Subsystem）：依据特定格式，加载 class 文件到内存
 
+![JVM](images/JVM.png)
+
 ### Native Interface 
 Class.forName(String, boolean, ClassLoader)
 
