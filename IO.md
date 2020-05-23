@@ -123,14 +123,14 @@ NIO 的核心：
   - SocketChannel
   - ServerSocketChannel
 - Buffers 
- - ByteBuffer
- - CharBuffer
- - DoubleBuffer
- - FloatBuffer
- - IntBuffer
- - Longbuffer
- - ShortBuffer
- - MappedByteBuffer
+   - ByteBuffer
+   - CharBuffer
+   - DoubleBuffer
+   - FloatBuffer
+   - IntBuffer
+   - Longbuffer
+   - ShortBuffer
+   - MappedByteBuffer
 - Selectors：允许单线程处理多个 Channel
 
 ## 多路复用 IO 模型
