@@ -28,7 +28,7 @@ public void improvedServe(int port) throws IOException {
   // 创建一个线程池（避免频繁创建和销毁线程这个巨大的开销，对连接数只有几百个的场景线程池比较有效）
   ExecutorService executorService = Executors.newFixedThreadPool(6);
   while (true) {
-    // 阻塞知道收到新的客户端连接
+    // 阻塞直到收到新的客户端连接
     final socket clientSocket = socket.accept();
     System.out.println("Accepted connection from " + clientSocket);
     // 将请求提交给线程池去执行
