@@ -424,7 +424,7 @@ public class WaitSleepDemo {
           try {
             System.out.println("thread A get lock");
             Thread.sleep(20);
-            System.out.println("thread A do wait method);
+            System.out.println("thread A do wait method");
             lock.wait();                              // 进入无限等待
             System.out.println("thread A is done");
           } catch (InterruptedException e) {
