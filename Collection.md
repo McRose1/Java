@@ -260,10 +260,11 @@ final Node<K, V>[] resize() {
       // 用新的更大的数组存
       newThr = oldThr << 1;   // double threshold
     }
-  } else if (oldThr > 0) {    // initial capacity was placed in  threshold
-    newCap = oldThr;          
-  } else {                    // zero initial threshlod signifies using 
-    
+  } else if (oldThr > 0) {    // initial capacity was placed in threshold
+      newCap = oldThr;          
+  } else {                    // zero initial threshlod signifies using defaults 
+      newCap = DEFAULT_INITIAL_CAPACITY;
+      newThr = (int)(DEFAULT_LOAD_FACTOR * DEFAULT_INITIAL_CAPACITY);
   }
 }
 ```
