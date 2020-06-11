@@ -252,10 +252,12 @@ final Node<K, V>[] resize() {
   int oldThr = threshold;
   int newCap, newThr = 0;
   if (oldCap > 0) {
+    // 超过可扩容的最大值，不可继续扩容
     if (oldCap >= MAXIMUM_CAPACITY) {
       threshold = Integer.MAX_VALUE;
       return oldTab;
     }
+    // 没超过最大值，就扩充为原来的 2 倍
     else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY && oldCap >= DEFAULT_INITIAL_CAPACITY) {
       // 用新的更大的数组存
       newThr = oldThr << 1;   // double threshold
