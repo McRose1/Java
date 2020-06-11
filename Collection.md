@@ -191,7 +191,7 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent, boolean evict) {
       e = ((TreeNode<K, V>)p).putTreeVal(this, tab, hash, key, value);
     } else {
       // 按链表插入方式往链表中添加元素
-      for (inr binCount = 0; ; ++binCount) {
+      for (int binCount = 0; ; ++binCount) {
         if ((e = p.next) == null) {
           p.next = newNode(hash, key, value, null);
           if (binCount >= TREEIFY_THRESHOLD - 1) {  // -1 for 1st
