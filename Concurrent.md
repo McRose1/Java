@@ -305,6 +305,18 @@ public enum State {
 }
 ```
 
+### ThreadLocal（线程本地存储）
+又称为线程本地存储，作用是提供线程内的局部变量，**这种变量在线程的生命周期内起作用，减少同一个线程内多个函数**或者组件之间一些**公共变量的传递的复杂度**。
+
+#### ThreadLocalMap（线程的一个属性）
+1. 每个线程都有一个自己的 ThreadLocalMap 类对象，可以将线程自己的对象保持到其中，各管各的，线程可以正确的访问到自己的对象。
+2. 讲一个共用的 ThreadLocal 静态实例作为 key，将不同对象的引用保存到不同线程的 ThreadLocalMap 中，然后在线程执行的各处通过这个静态 ThreadLocal 实例的 get() 方法取得自己线程保存的那个对象，避免了将这个对象作为参数传递的麻烦。
+3. ThreadLocalMap 其实就是线程里面的一个属性，它在 Thread 类中定义。ThreadLocal.ThreadLocalMap threadLocals = null;
+
+#### 使用场景
+解决数据库连接、Session 管理
+
+
 ### sleep 和 wait 的区别
 **基本的差别**：
 - sleep 是 Thread 类的方法，wait 是 Object 类中定义的方法
