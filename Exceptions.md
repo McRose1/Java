@@ -12,6 +12,8 @@
 
 另外，调用这个方法的其他代码也无法继续执行，异常处理机制会将代码执行交给异常处理器。
 
+[!exceptions](/images/exceptions.jpeg)
+
 ## 异常分类
 - Throwable 
   - Error（程序无法处理的错误）
