@@ -663,6 +663,14 @@ MajorGC 会产生内存碎片，为了减少内存损耗，我们一般需要进
 
 **类的元数据放入 native memory，字符串池和类的静态变量放入 Java 堆中**，这样可以加载多少类的元数据就不再由 MaxPermSize 控制，而由系统的实际可用空间来控制。
 
+### Java 内存申请过程
+1. JVM 会试图为相关 Java 对象在 Eden 区中初始化一块内存区域；
+2. 当 Eden 空间足够时，内存申请结束。否则到下一步；
+3. JVM 试图释放在 Eden 中所有不活跃的对象（minor collection），释放后若 Eden 空间仍然不足以放入新对象，则试图将部分 Eden 中活跃对象放入 Survivor 区；
+4. Survivor 区被用来作为 Eden 及 old 的中间交换区域，当 old 区空间足够时，Survivor 区的对象会被移到 old 区，否则会被保留在 Survivor 区；
+5. 当 old 区空间不够时，JVM 会在 old 区进行 major collection
+6. 完成垃圾收集后，若 Survivor 及 old 区仍然无法存放从 Eden 复制过来的部分对象，导致 JVM 无法在 Eden 区为新对象创建内存区域，则出现 “Out of memory” 错误。
+
 ## 垃圾回收算法
 
 如何确定垃圾？
