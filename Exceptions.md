@@ -25,9 +25,19 @@ Throwable 是 Java 语言中所有错误或异常的超类。下一层分为 **E
 
 **从概念角度解析 Java 的异常处理机制**：
 - Error：程序无法处理的系统错误，编译器不做检查
+
+java.lang.Error: An Error is a subclass of Throwable that indicates serious problems that a reasonable application should try to catch. Most such errors are abnormal conditions.
+
 Error 类是指 Java 运行时系统的内部错误和资源耗尽错误。应用程序不会抛出该类对象。如果出现了这样的错误，除了告知用户，剩下的就是尽力使程序安全的终止。
 
+**合理的应用程序不会去 try/catch 这种错误。**
+
 - Exception（RuntimeException, CheckedException）：程序可以处理的异常，捕获后可能恢复
+
+java.lang.Exception: The class Exception and its subclasses are a form of Throwable that indicates conditions that a reasonable application might want to catch.
+
+**即它仅仅是一种程序运行条件，而非严重错误，并且鼓励用户程序去 catch 它。**
+
 Exception 又有 2 个分支，一个是运行时异常（RuntimeException），一个是 CheckedException。
 
 ### RuntimeException（不可预知的，程序应当自行避免） 
