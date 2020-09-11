@@ -116,7 +116,34 @@ Error：
 - **throws 表示出现异常的一种可能性**，并不一定会发生这些异常；**throw 则是抛出了异常**，执行 throw 则一定抛出了某种异常对象。
 - 两者都是消极处理异常的方式，只是抛出或者可能抛出异常，但是不会由函数去处理异常，真正的处理异常由函数的上层调用处理。
 
-### try-catch 的性能
+### try-catch-finally
+- try：用于捕获异常。其后可接0个或多个catch块，如果没有catch块，则必须跟一个finally块
+- catch：用于处理try捕获到的异常
+- finally：无论是否捕获或处理异常，finally块里的语句都会被执行。当在try块或者catch块中遇到return语句时，finally语句块将在方法返回之前被执行。
+
+在以下4种特殊情况下，finally块不会被执行：
+1. 在finally语句块第一行发生了异常。因为在其他行，finally块还是会得到执行
+2. 在前面的代码中用了 System.exit(int) 已退出程序。exit是带参函数，若该语句在异常语句之后，finally会执行
+3. 程序所在的线程死亡
+4. 关闭CPU
+
+注意：当try语句和finally语句中都有return语句时，在方法返回之前，finally语句的内容将被执行，并且finally语句的返回值将会覆盖原始的返回值，如下：
+```java
+public class Test {
+  public static int f(int value) {
+    try {
+      return value * value;
+    } finally {
+      if (value == 2) {
+        return 0;
+      }
+    }
+  }
+}
+```
+如果调用 f(2)，返回值将是0
+
+#### try-catch 的性能
 Java 异常处理消耗性能的地方：
 - try-catch 块影响 JVM 的优化
 - 异常对象实例需要保存栈快照等信息，开销较大
