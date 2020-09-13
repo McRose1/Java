@@ -25,16 +25,20 @@
 Java 的 List 是非常常用的数据类型。List 是有序的 Collection。Java List 一共 3 个实现类：ArrayList, LinkedList, Vector
 
 ### ArrayList（数组）
-ArrayList 是最常用的 List 实现类，内部是通过数组实现的，它允许对元素进行快速随机访问。
+ArrayList 是最常用的 List 实现类，内部是通过**数组**实现的，它允许对元素进行快速随机访问。
 
-数组的缺点是每个元素之间不能有间隔，**当数组大小不满足时需要增加存储能力，就要将已经有数组的数据复制到新的存储空间中**。
+数组的缺点是每个元素之间不能有间隔，**当数组大小不满足时需要增加存储能力，创建更大的新数组，将已经有数组的数据复制到新的存储空间中**。
 
 **当从 ArrayList 的中间位置插入或者删除元素时，需要对数组进行复制、移动，代价比较高。因此，它适合随机查找和遍历，不适合插入和删除**。
+
+**非线程安全**
 
 ### LinkedList（链表）
 **LinkedList 是用链表结构存储数据的，很适合数据的动态插入和删除**，随机访问和遍历速度比较慢。
 
 另外，它还提供了 List 接口中没有定义的方法，专门用于操作表头和表尾元素，可以当做堆栈、队列和双向队列使用。
+
+LinkedList 的优点在于可以将零散的内存单元通过附加引用的方式关联起来，形成按链路顺序查找的线性结构，内存利用率较高。
 
 ### Vector（数组实现线程同步）
 Vector 和 ArrayList 一样，也是通过数组实现的，不同的是它**支持线程的同步，即某一时刻只有一个线程能够写 Vector**，避免多线程同时写而引起的不一致性，但实现同步需要很高的花费，因此，访问它比访问 ArrayList 慢。
@@ -44,7 +48,7 @@ Vector 和 ArrayList 一样，也是通过数组实现的，不同的是它**支
     - 无序（存储和取出的顺序）
     - 元素唯一
 - 分类
-    - 底层是 HashMap
+    - **底层是 HashMap**（线程不安全）
         - HashSet：保证元素唯一性
             - hashCode()
             - equals()
@@ -61,6 +65,8 @@ Set 注重独一无二的性质，该体系集合用于存储无序（存入和�
 哈希表存放的是哈希值。HashSet 存储元素的顺序并不是按照存入时的顺序（和 List 显然不同），而是按照哈希值来存的所以取数据也是按照哈希值取得。
 
 元素的哈希值是通过元素的 hashcode 方法来获取的，**HashSet 首先判断两个元素的哈希值，如果哈希值一样，接着会比较 equals 方法，如果 equals 结果为 true，HashSet 就视为同一个元素。如果为 false 就不是同一个元素**。
+- 对于包装类型：直接按值比较
+- 对于引用类型：先比较 hashCode 是否相同，不同则代表不是同一个对象，相同则继续比较 equals，都相同才是同一个对象。
 
 哈希值相同 equals 为 false 的元素是怎么存储的呢？就是在同样的哈希值下顺延（可以认为哈希值相同的元素放在一个哈希桶中），也就是哈希值一样的存一列。
 
@@ -72,9 +78,18 @@ HashSet 通过 hashCode 值来确定元素在内存中的位置，**一个 hashC
 - values: Collection<V> values(); -> 允许重复
 
 ### HashMap（数组+链表+红黑树）
+JDK 8 之前底层实现是 数组+链表，JDK 8 改为 数组+链表/红黑树，节点类型从 Entry 变更为 Node。
+
+主要成员变量包括:
+- 存储数据的 table 数组：记录 HashMap 的数据，每个下标对应一条链表，所有哈希冲突的数据都会被存放到同一条链表，Node/Entry 节点包含四个成员变量：key、value、next 指针和 hash 值。
+- 元素数量 size、加载因子 
+- loadFactor
+
 HashMap 根据键的 hashCode 值存储数据，大多数情况下可以直接定位到它的值，因而具有很快的访问速度，但遍历顺序却是不确定的。
 
 HashMap 最多只允许一条记录的键为 null，允许多条记录的值为 null。
+
+HashMap 默认初始化容量为 16，扩容容量必须是 2 的幂次方，最大容量为 1<<30，默认加载因子为 0.75
 
 HashMap 非线程安全，即任一时刻可以有多个线程同时写 HashMap，可能会导致数据的不一致。
 
@@ -93,7 +108,6 @@ public class SafeHashMapDemo {
 }
 ```
 synchronizedMap 和 HashTable 的实现几乎一样，多线程由于都是串行执行所以效率很低
-
 
 HashMap: put 方法逻辑：
 1. 如果 HashMap 未被初始化过，则初始化
@@ -119,7 +133,26 @@ HashMap 知识点回顾：
 - put 和 get 的流程
 - 哈希算法，扩容，性能
 
-#### Java7 实现
+#### hashCode()
+hashCode() method is used to get the hash Code of an object.
+
+hashCode() method of object class returns the memory reference of object in integer form.
+
+Definition of hashCode() is native because there is not any direct method in java to fetch the reference of object.
+
+It is possible to provide your own implementation of hashCode(). 
+
+In HashMap, hashCode() is used to calculate the bucket and therefore calculate the index.
+
+#### equals()
+equals method is used to check that 2 objects are equal or not.
+
+This method is provided by Object class. 
+
+You can override this in your class to provide your own implementation.
+
+
+#### JDK 8 之前 实现
 大方向上，HashMap 里面是一个数组，然后数组中每个元素是一个单向链表。
 
 每个元素的实体是嵌套类 Entry 的实例，Entry 包含 4 个属性：**key, value, hash值, 和用于单向链表的 next**。
@@ -127,6 +160,21 @@ HashMap 知识点回顾：
 1. capacity：当前数组容量，始终保持 2^n，可以扩容，扩容后数组大小为当前的 2 倍。
 2. loadFactor：负载因子，默认为 0.75.
 3. threshold：扩容的阈值，等于 capacity * loadFactor
+
+- hash：计算元素 key 的 hash 值
+    1. 处理 String 类型时，调用 stringHash32 方法获取 hash 值
+    2. 处理其他类型数据时，提供一个相对于 HashMap 实例唯一不变的随机值 hashSeed 作为计算初始量
+    3. 执行异或和无符号右移使 hash 值更加离散，减小哈希冲突概率
+    
+- indexFor：计算元素下标
+    - 将 hash 值和数组长度-1 进行与操作，保证结果不会超过 table 数组范围
+    
+- get：获取元素的 value 值
+    1. 如果 key 为 null，调用 getForNullKey 方法，如果 size 为 0 表示链表为空，返回 null。如果 size 不为 0 说明存在链表，遍历 table[0] 链表，如果找到了 key 为 null 的节点则返回其 value，否则返回 null。
+    2. 如果 key 不为 null，调用 getEntry 方法，如果 size 为 0 表示链表为空，返回 null 值。如果 size 不为 0，首先计算 key 的 hash 值，然后遍历该链表的所有节点，如果节点的 key 和 hash 值都和要找的元素相同则返回其 Entry 节点。
+    3. 如果找到了对应的 Entry 节点，调用 getValue 方法获取其 value 并返回，否则返回 null。
+    
+
 
 #### Java8 实现
 Java8 对 HashMap 进行了一些修改，**最大的不同就是利用了红黑树，所以其由 数组+链表+红黑树**组成。
@@ -398,6 +446,22 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
 别的需要注意的点：
 - size()方法和 mappingCount()方法的异同，两者计算是否准确？
 - 多线程环境下如何进行扩容？
+
+### TreeMap
+基于红黑树实现，增删改查平均和最差时间复杂度为 O(logn)，最大特点是 key 有序。
+
+key 必须实现 Comparable 接口或提供的 Comparator 比较器，所以 key 不允许是 null。
+
+HashMap 依靠 hashCode 和 equals 去重，而 TreeMap 则依靠 Comparable 和 Comparator。
+
+TreeMap 排序时，如果比较器不为空就会优先使用比较器的 compare 方法，否则使用 key 实现的 Comparable 的 compareTo 方法，两者都不满足会抛出异常。
+
+TreeMap 通过 put 和 deleteEntry 实现增加和删除树节点。
+
+插入新节点的规则有 3 个：
+1. 需要调整的新节点总是红色的。
+2. 如果插入新节点的父节点是黑色的，不需要调整。
+3. 如果插入新节点的父节点是红色的，由于红黑树不能出现相邻红色，进入循环判断，通过重新着色或左右旋转来调整。
 
 
 
