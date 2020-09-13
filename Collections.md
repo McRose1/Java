@@ -93,7 +93,17 @@ HashMap 默认初始化容量为 16，扩容容量必须是 2 的幂次方，最
 
 HashMap 非线程安全，即任一时刻可以有多个线程同时写 HashMap，可能会导致数据的不一致。
 
-如果需要满足线程安全，可以用 Collections 的 synchronizedMap 方法时 HashMap 具有线程安全的能力，或者使用 ConcurrentHashMap。
+JDK 7 存在死循环和数据丢失问题。
+
+1. 数据丢失：
+    - 并发赋值被覆盖：在 createEntry 方法中，新添加的元素直接放在头部，使元素之后可以被更快访问，但如果两个线程同时执行到此处，会导致其中一个线程的赋值被覆盖。
+    - 已遍历区间新增元素丢失：当某个线程在 transfer 方法迁移时，其他线程新增的元素可能落在已遍历过的哈希槽上。遍历完成后，table 数组引用指向了 newTable，新增元素丢失。
+    - 新表被覆盖：如果 resize 完成，执行了 table = newTable，则后续元素就可以在新表上进行插入。但如果多线程同时 resize，每个线程都会 new 一个数组，这是线程内的局部对象，线程之间不可见。迁移完成后 resize 的线程会赋值给 table 线程共享变量，可能会覆盖其他线程的操作，在新表中插入的对象都会被丢弃。
+2. 死循环：扩容时 resize 调用 transfer 使用头插法迁移元素，虽然 newTable 是局部变量，但原先 table 中的 Entry 链表是共享的，问题根源是 Entry 的 next 指针并发修改，某线程还没有将 table 设为 newTable 时用完了 CPU 时间片，导致数据丢失或死循环。
+
+JDK 8 在 resize 方法中完成扩容，并改用尾插法，不会产生死循环，但并发下仍可能丢失数据。
+
+如果需要满足线程安全，可以用 Collections 的 synchronizedMap 方法使 HashMap 具有线程安全的能力，或者使用 ConcurrentHashMap。
 
 SafeHashMapDemo.java
 ```java
