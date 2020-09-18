@@ -30,6 +30,7 @@ char | 2 bytes | character/letter or ASCII values
 
 ### Precision Loss
 ![Precision Loss](/images/TypeCasting.png)
+
 实线代表合法转换即无信息丢失的转换，虚线表示转换可能存在精度丢失问题。
 
 
