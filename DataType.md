@@ -28,6 +28,10 @@ char | 2 bytes | character/letter or ASCII values
 - Narrowing Casting (manually) - converting a larger type to a smaller type size
   - double -> float -> long -> int -> char -> short -> byte
 
+### Precision Loss
+![Precision Loss](/images/TypeCasting.png)
+实线代表合法转换即无信息丢失的转换，虚线表示转换可能存在精度丢失问题。
+
 
 ## Non-primitive data type（引用数据类型）
 - String
