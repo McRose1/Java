@@ -178,14 +178,14 @@ public class ThreadPoolDemo {
 ```
 
 ### Java 线程池
-利用 Executors 创建不同的线程池满足不同场景的需求：
-1. newFixedThreadPool(int nThreads)：指定工作线程数量的线程池
-2. newCachedThreadPool()：处理大量短时间工作任务的线程池，
+利用 Executors 的静态工厂方法创建不同的线程池以满足不同场景的需求：
+1. newFixedThreadPool(int nThreads)：创建一个定长线程池，可控制线程最大并发数，超出的线程会在队列中等待，不存在空闲线程，keepAliveTime = 0。该线程池使用的工作队列是无界阻塞队列 LinkedBlockingQueue，适用于负载较重的服务器。
+2. newCachedThreadPool()：创建一个可缓存线程池，如果线程池长度超过处理需要，可灵活回收空闲线程，若无可回收，则新建线程。适用于处理大量短时间工作任务的线程池，
   2.1 试图缓存线程并重用，当无缓存线程可用时，就会创建新的工作线程；
   2.2 如果线程闲置的时间超过阈值，则会被终止并移出缓存；
   2.3 系统长时间闲置的时候，不会消耗什么资源
-3. newSingleThreadExecutor()：创建唯一的工作者线程来执行任务，如果线程异常结束，会有另一个线程取代它
-4. newSingleThreadScheduledExectutor() 与 newScheduledThreadPool(int corePoolSize)：定时或者周期性的工作调度，两者的区别在于单一工作线程还是多个线程
+3. newSingleThreadExecutor()：创建一个单线程化的线程池，它只会用唯一的工作线程来执行任务，保证所有任务按照指定顺序（FIFO, LIFO, 优先级）执行；如果线程异常结束，会有另一个线程取代它
+4. newSingleThreadScheduledExectutor() 与 newScheduledThreadPool(int corePoolSize)：创建一个定长线程池，支持定时及周期性的任务执行，两者的区别在于单一工作线程还是多个线程
 5. newWorkStealingPool()：内部会构建 ForkJoinPool，利用 working-stealing 算法，并行地处理任务，不保证处理顺序
 
 Fork/Join 框架：
@@ -194,8 +194,11 @@ Fork/Join 框架：
 Work-Stealing 算法：某个线程从其他队列里窃取任务来执行
 
 **为什么要使用线程池**：
-- 降低资源消耗
+- 降低资源消耗，复用已创建的线程，降低开销、扩大最大并发数
 - 提高线程的可管理性
+- 隔离线程环境，可以配置独立线程池，将较慢的线程与较快的隔离开，避免相互影响
+- 实现任务线程队列缓冲策略和拒绝机制
+- 实现某些与时间相关的功能，如定时执行、周期执行等。
 
 **线程池的状态**：
 - RUNNING：能接受新提交的任务，并且也能处理阻塞队列中的任务
