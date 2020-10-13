@@ -7,6 +7,13 @@
 - 二叉树的遍历方式及其递归和非递归的实现；
 - 红黑树的旋转
 
+## HashMap
+extends Map Interface 
+
+
+In Java 8, when we have too many unequal keys whih gives same hashcode(index) - when the number of items in a hash bucket grows beyond certain threshold(TREEIFY_THRESHOLD = 8), content of that bucket switches from using a linked list of Entry objects to a balanced tree. 
+
+
 ## AVL（平衡二叉树）
 AVL树具有以下性质：它是一棵空树或它的左右两个子树的高度差的绝对值不超过1，并且左右两个子树都是一棵平衡二叉树。
 
