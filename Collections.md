@@ -91,6 +91,13 @@ HashMap 最多只允许一条记录的键为 null，允许多条记录的值为 
 
 HashMap 默认初始化容量为 16，扩容容量必须是 2 的幂次方，最大容量为 1<<30，默认加载因子为 0.75
 
+**为什么初始容量和扩容容量必须是 2 的幂次方？**
+因为向集合中添加元素会使用 **(n - 1) & hash** 的计算方法来得出该元素在集合中的位置。其中 n 是集合的容量，hash 是添加的元素经过 hash 函数计算出来的 hash 值。
+
+而当 HashMap 的容量为 2 的 n 次幂时，(n - 1)的二进制就是 111111.....11111 这样形式，如此一来与添加元素的 hash 值进行与位运算时，能够充分的散列，使得添加的元素均匀分布在 HashMap 的每个位置上，减少 hash 碰撞。
+
+---
+
 HashMap 非线程安全，即任一时刻可以有多个线程同时写 HashMap，可能会导致数据的不一致。
 
 JDK 7 存在死循环和数据丢失问题。
@@ -335,6 +342,13 @@ final Node<K, V>[] resize() {
     - 当前的 ConcurrentHashMap：CAS + synchronized 使锁更细化（数组+链表+红黑树）
 
 ### ConcurrentHashMap
+ConcurrentHashMap 用于解决 HashMap 的线程安全和 HashTable 的低效问题。HashTable 效率低是因为所有线程都必须竞争同一把锁，假如容器有多把锁，买把锁只锁部分数据，那么多线程访问不同数据段时就不会存在竞争。
+
+ConcurrentHashMap 使用锁分段，将数据分成 segment 数据段，给每个数据段配一把锁，当一个线程占用锁访问某段数据时，其他数据段也能被其他线程访问。
+
+- get：实现简单高效，先经过一次 rehash 得到一个 hash 值，再用这个 hash 值定位到 segment，最后通过散列算法定位到元素。get 的高效在于不用加锁，除非读到空值才会加锁重读。get 方法中将共享变量定义为 volatile，由于只需要读所以不用加锁。
+- put：必须加锁，首先定位到 segment，然后进行插入操作，第一步判断是否需要对 segment 里的 HashEntry 数组进行扩容，
+
 ConcurrentHashMap.java
 ```java
 public V put(K key, V value) {
@@ -456,6 +470,12 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
 别的需要注意的点：
 - size()方法和 mappingCount()方法的异同，两者计算是否准确？
 - 多线程环境下如何进行扩容？
+
+#### ConcurrentHashMap JDK 7 和 8 的区别
+1. 取消分段锁机制，降低冲突概率
+2. 同一个哈希槽上的元素超过阈值后，链表改为红黑树结构（这一点和 HashMap 一样）
+3. 使用更加优化的方式统计集合内的元素数量，具体优化变现在：在 put、resize 和 size 方法中涉及元素总数的更新和计算时都避免了锁，使用 CAS 代替
+    - get 同样不需要同步，put 时如果没有出现哈希冲突，就使用 CAS 添加元素，否则使用 synchronized 添加元素
 
 ### TreeMap
 基于红黑树实现，增删改查平均和最差时间复杂度为 O(logn)，最大特点是 key 有序。
