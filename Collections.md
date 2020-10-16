@@ -346,8 +346,19 @@ ConcurrentHashMap 用于解决 HashMap 的线程安全和 HashTable 的低效问
 
 ConcurrentHashMap 使用锁分段，将数据分成 segment 数据段，给每个数据段配一把锁，当一个线程占用锁访问某段数据时，其他数据段也能被其他线程访问。
 
-- get：实现简单高效，先经过一次 rehash 得到一个 hash 值，再用这个 hash 值定位到 segment，最后通过散列算法定位到元素。get 的高效在于不用加锁，除非读到空值才会加锁重读。get 方法中将共享变量定义为 volatile，由于只需要读所以不用加锁。
-- put：必须加锁，首先定位到 segment，然后进行插入操作，第一步判断是否需要对 segment 里的 HashEntry 数组进行扩容，
+- get：1.7 和 1.8 基本类似，实现简单高效，先经过一次 rehash 得到一个 hash 值，再用这个 hash 值定位到 segment，最后通过散列算法定位到元素。get 的高效在于不用加锁，除非读到空值才会加锁重读。**get 方法中将共享变量定义为 volatile，保证了修改的可见性，所以不用加锁**。
+- put：
+    - 1.7：必须加锁，首先定位到 segment，然后进行插入操作，第一步判断是否需要对 segment 里的 HashEntry 数组进行扩容，第二步定位添加元素的位置，然后将其放入数组
+    - 1.8：由于移除了 segment，类似 HashMap，可以直接定位到桶，拿到 first 节点后进行判断：
+        1. 为空则 CAS 插入
+        2. 为 -1 则说明在扩容，则跟着一起扩容
+        3. else 则加锁 put（类似 1.7）
+- resize：
+    - 1.7：跟 HashMap 步骤一样，只不过是搬到单线程中执行，避免了 HashMap 在 1.7 中扩容时死循环的问题，保证线程安全
+    - 1.8：支持并发扩容，HashMap 扩容在 1.8 中**由头插改为尾插**（为了避免死循环问题），ConcurrentHashMap 也是，迁移也是从尾部开始，扩容前在桶的头部放置一个 hash 值为 -1 的节点，这样别的线程访问时就能判断是否该桶已经被其他线程处理过了
+- size：
+    - 1.7：计算 2 次，如果不变则返回计算结果，若不一致，则锁住所有的 segment 求和
+    - 1.8：用 baseCount 来存储当前的节点个数
 
 ConcurrentHashMap.java
 ```java
@@ -471,7 +482,7 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
 - size()方法和 mappingCount()方法的异同，两者计算是否准确？
 - 多线程环境下如何进行扩容？
 
-#### ConcurrentHashMap JDK 7 和 8 的区别
+#### ConcurrentHashMap 1.7 和 1.8 的区别
 1. 取消分段锁机制，降低冲突概率
 2. 同一个哈希槽上的元素超过阈值后，链表改为红黑树结构（这一点和 HashMap 一样）
 3. 使用更加优化的方式统计集合内的元素数量，具体优化变现在：在 put、resize 和 size 方法中涉及元素总数的更新和计算时都避免了锁，使用 CAS 代替
